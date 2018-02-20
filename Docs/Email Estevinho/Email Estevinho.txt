@@ -1,0 +1,34 @@
+As of now….
+
+Formatos mais usados por nós:
+UYVY422
+NV12 (os módulos de Hardware costumam receber assim)
+V210
+YUV422P/YUV422P10
+YUV420P/YUV420P10
+RGBA
+
+A biblioteca que nós usamos para quase todos os resamples e rescales é a libswscale:
+https://www.ffmpeg.org/doxygen/trunk/group__lsws.html (A API é bastante simples, é tudo single-threaded, se quisermos n threads temos de partir a imagem em n slices e fazer n operações)
+
+No entanto o FFmpeg não considera o V210 um espaço de cor mas sim um codec pelo que para evitar adicionar a entropia de um encoder/decoder temos algum código nosso para estas conversões.
+Algumas destas são (que envio-te em anexo o nosso código):
+- V210 para UYVY422 (inclui versão com loops normais e com SSE3/AVX2).
+- UYVY422 para V210, não tem implementação SIMD.
+
+De uma forma geral em alguns testes que fizemos no passado, um thread com SSE tem +/- a mesma performance que 4 threads ciclos normal. No entanto se usares todos os threads da maquina com as duas implementações, o tempo tende para o mesmo valor com ambas as implementações (potencialmente o bottleneck fica na memoria). A grande diferença é a quantidade de recursos utilizada, 1 thread é competitivo com 4, numa maquina com 8 unidades virtuais de processamento isso faz uma grande diferença.
+Não temos também suporte para rescale de todo em V210 e temos de o converter para outro formato como YUV422P10, para fazer o rescale e converter de volta.
+
+
+Os resizes são todos feitos com a libswscale, e são pesados, fazer downsize de uma frame 3840x2160 para 1280x720 é praticamente tão pesado como codificar a ultima em H.264.
+
+Posto isto os pontos que para nós são mais interessantes são:
+- reduzir o tempo dos resamples
+- reduzir o tempo dos resizes.
+
+Se formos usar o NVENC (encoder de Hardware NVIDIA) com uma source de SDI por exemplo, temos de fazer:
+UYVY422 4k -> UYVY422 1080p -> NV12-> NVENC
+As partes a bold são feitas em software, e poderíamos fazer algo:
+UYVY422 4k -> UYVY422 1080p -> NV12-> NVENC
+
+Não deixes que isto altere o teu planemaneot though.
