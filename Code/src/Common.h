@@ -36,4 +36,16 @@ int createImageDataBuffer(int width, int height, AVPixelFormat pixelFormat, uint
 // Initialize and transfer data to AVFrame
 int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat pixelFormat, AVFrame** frame);
 
+// int val  - value to be clamped
+// int min  - minimum limit of clamping
+// int max  - maximum limit of clamping
+// Limit a value to a defined interval
+int clamp(int val, int min, int max);
+
+// float valA   - a point of the line of interpolation
+// float valB   - a point of the line of interpolation
+// float dist   - distance of the point to be interpolated to the point valA
+// Interpolate a value between two points
+float lerp(float valA, float valB, float dist);
+
 #endif

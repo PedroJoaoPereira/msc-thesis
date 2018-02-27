@@ -101,3 +101,18 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
 
     return 0;
 }
+
+// Limit a value to a defined interval
+int clamp(int val, int min, int max){
+    if(val < min)
+        return min;
+    else if(val > max)
+        return max;
+    else
+        return val;
+}
+
+// Interpolate a value between two points
+float lerp(float valA, float valB, float dist){
+    return valA * (1.0f - dist) + valB * dist;
+}

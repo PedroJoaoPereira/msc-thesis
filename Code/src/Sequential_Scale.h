@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <math.h>
 #include <chrono>
 
 #include "ImageInfo.h"
