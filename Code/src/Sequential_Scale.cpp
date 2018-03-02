@@ -16,6 +16,12 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
                int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[],
                int operation);
 
+
+
+float cubicInterpolate(uint8_t valA, uint8_t valB, uint8_t valC, uint8_t valD, float dist){
+    return valB + 0.5f * dist * (valC - valA + dist * (2.0f * valA - 5.0f * valB + 4.0f * valC - valD + dist * (3.0f * (valB - valC) + valD - valA)));
+}
+
 int sequential_scale(ImageInfo src, ImageInfo dst, int operation){
     // Variables used
     int retVal = -1, duration = -1;
@@ -215,75 +221,70 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
               int operation){
 
     // Get scale ratios
-    float scaleHeightRatio = (float) dstHeight / srcHeight;
-    float scaleWidthRatio = (float) dstWidth / srcWidth;
+    float scaleHeightRatio = static_cast<float>(dstHeight / srcHeight);
+    float scaleWidthRatio = static_cast<float>(dstWidth / srcWidth);
 
     if(operation == SWS_BILINEAR){
         // Iterate through each line
         for(int lin = 0; lin < dstHeight; lin++){
-            // Get line in original image
-            float linOrigFloat = lin / scaleHeightRatio;
-            float linOrigRemainder = fmod(lin, scaleHeightRatio);
-            int linOrig = int(linOrigFloat);
-            float linDist = linOrigFloat - floor(linOrigFloat);
+            // Original coordinates
+            float linInOriginal = (lin - 0.5) / scaleHeightRatio;
+
+            // Calculate original pixels coordinates to interpolate
+            int linTop = clamp(floor(linInOriginal), 0, srcHeight - 1);
+            int linBottom = clamp(ceil(linInOriginal), 0, srcHeight - 1);
+
+            // Calculate distance to the top left pixel
+            float linDist = linInOriginal - linTop;
 
             // Iterate through each column
             for(int col = 0; col < dstWidth; col++){
-                // Get column in original image
-                float colOrigFloat = col / scaleWidthRatio;
-                float colOrigRemainder = fmod(col, scaleWidthRatio);
-                int colOrig = int(colOrigFloat);
-                float colDist = colOrigFloat - floor(colOrigFloat);
+                // Original coordinates
+                float colInOriginal = (col - 0.5) / scaleWidthRatio;
 
-                // If same position as an original pixel
-                if(linOrigRemainder == 0 && colOrigRemainder == 0){
-                    // Original pixel to the result
-                    dstSlice[0][lin * dstWidth + col] = srcSlice[0][linOrig * srcWidth + colOrig];
-                    dstSlice[1][lin * dstWidth + col] = srcSlice[1][linOrig * srcWidth + colOrig];
-                    dstSlice[2][lin * dstWidth + col] = srcSlice[2][linOrig * srcWidth + colOrig];
+                // Calculate original pixels coordinates to interpolate
+                int colLeft = clamp(floor(colInOriginal), 0, srcWidth - 1);
+                int colRight = clamp(ceil(colInOriginal), 0, srcWidth - 1);
 
-                    // Continue processing following pixels
-                    continue;
-                }
+                // Calculate distance to the top left pixel
+                float colDist = colInOriginal - colLeft;
 
-                // Get original pixels value - component-line-column
-                uint8_t y00 = srcSlice[0][linOrig * srcWidth + colOrig];
-                uint8_t y01 = srcSlice[0][linOrig * srcWidth + (colOrig + 1)];
-                uint8_t y10 = srcSlice[0][(linOrig + 1) * srcWidth + colOrig];
-                uint8_t y11 = srcSlice[0][(linOrig + 1) * srcWidth + (colOrig + 1)];
+                // Calculate weight of neighboring pixels
+                float leftRatio = 1 - colDist;
+                float rightRatio = colDist;
+                float topRatio = 1 - linDist;
+                float bottomRatio = linDist;
 
-                uint8_t u00 = srcSlice[1][linOrig * srcWidth + colOrig];
-                uint8_t u01 = srcSlice[1][linOrig * srcWidth + (colOrig + 1)];
-                uint8_t u10 = srcSlice[1][(linOrig + 1) * srcWidth + colOrig];
-                uint8_t u11 = srcSlice[1][(linOrig + 1) * srcWidth + (colOrig + 1)];
+                // Bilinear interpolation operation
+                // Y
+                dstSlice[0][lin * dstWidth + col] = double2uint8_t(
+                    (srcSlice[0][linTop * srcWidth + colLeft] * leftRatio +
+                     srcSlice[0][linTop * srcWidth + colRight] * rightRatio) *
+                    topRatio +
+                    (srcSlice[0][linBottom * srcWidth + colLeft] *
+                     leftRatio + srcSlice[0][linBottom * srcWidth + colRight] *
+                     rightRatio) *
+                    bottomRatio);
 
-                uint8_t v00 = srcSlice[2][linOrig * srcWidth + colOrig];
-                uint8_t v01 = srcSlice[2][linOrig * srcWidth + (colOrig + 1)];
-                uint8_t v10 = srcSlice[2][(linOrig + 1) * srcWidth + colOrig];
-                uint8_t v11 = srcSlice[2][(linOrig + 1) * srcWidth + (colOrig + 1)];
+                // U
+                dstSlice[1][lin * dstWidth + col] = double2uint8_t(
+                    (srcSlice[1][linTop * srcWidth + colLeft] * leftRatio +
+                     srcSlice[1][linTop * srcWidth + colRight] * rightRatio) *
+                    topRatio +
+                    (srcSlice[1][linBottom * srcWidth + colLeft] *
+                     leftRatio + srcSlice[1][linBottom * srcWidth + colRight] *
+                     rightRatio) *
+                    bottomRatio);
 
-                // Horizontal linear interpolation
-                float liy00y01 = lerp(y00, y01, colDist);
-                float liy10y11 = lerp(y10, y11, colDist);
-                float liYVertical = lerp(liy00y01, liy10y11, linDist);
-
-                float liu00u01 = lerp(u00, u01, colDist);
-                float liu10u11 = lerp(u10, u11, colDist);
-                float liUVertical = lerp(liu00u01, liu10u11, linDist);
-
-                float liv00v01 = lerp(v00, v01, colDist);
-                float liv10v11 = lerp(v10, v11, colDist);
-                float liVVertical = lerp(liv00v01, liv10v11, linDist);
-
-                // Clamp result
-                uint8_t newYValue = uint8_t(clamp(liYVertical, 0, 255));
-                uint8_t newUValue = uint8_t(clamp(liUVertical, 0, 255));
-                uint8_t newVValue = uint8_t(clamp(liVVertical, 0, 255));
-
-                // Assign new value to the corresponding pixel
-                dstSlice[0][lin * dstWidth + col] = newYValue;
-                dstSlice[1][lin * dstWidth + col] = newUValue;
-                dstSlice[2][lin * dstWidth + col] = newVValue;
+                // V
+                dstSlice[2][lin * dstWidth + col] = double2uint8_t(
+                    (srcSlice[2][linTop * srcWidth + colLeft] * leftRatio +
+                     srcSlice[2][linTop * srcWidth + colRight] * rightRatio) *
+                    topRatio +
+                    (srcSlice[2][linBottom * srcWidth + colLeft] *
+                     leftRatio + srcSlice[2][linBottom * srcWidth + colRight] *
+                     rightRatio) *
+                    bottomRatio);
             }
         }
 
@@ -291,6 +292,94 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
     }
 
     if(operation == SWS_BICUBIC){
+        // Iterate through each line
+        for(int lin = 0; lin < dstHeight; lin++){
+            // Original coordinates
+            float linInOriginal = (lin - 0.5) / scaleHeightRatio;
+
+            // Calculate original pixels coordinates to interpolate
+            int linTopFurther = clamp(floor(linInOriginal - 1), 0, srcHeight - 1);
+            int linTop = clamp(floor(linInOriginal), 0, srcHeight - 1);
+            int linBottom = clamp(ceil(linInOriginal), 0, srcHeight - 1);
+            int linBottomFurther = clamp(ceil(linInOriginal + 1), 0, srcHeight - 1);
+
+            // Calculate distance to the top left pixel
+            float linDist = linInOriginal - linTop;
+
+            // Iterate through each column
+            for(int col = 0; col < dstWidth; col++){
+                // Original coordinates
+                float colInOriginal = (col - 0.5) / scaleWidthRatio;
+
+                // Calculate original pixels coordinates to interpolate
+                int colLeftFurther = clamp(floor(colInOriginal - 1), 0, srcWidth - 1);
+                int colLeft = clamp(floor(colInOriginal), 0, srcWidth - 1);
+                int colRight = clamp(ceil(colInOriginal), 0, srcWidth - 1);
+                int colRightFurther = clamp(ceil(colInOriginal + 1), 0, srcWidth - 1);
+
+                // Calculate distance to the top left pixel
+                float colDist = colInOriginal - colLeft;
+
+                // Calculate weight of neighboring pixels
+                float leftRatio = 1 - colDist;
+                float rightRatio = colDist;
+                float topRatio = 1 - linDist;
+                float bottomRatio = linDist;
+
+                // Gets the original pixels values
+                // 1st row
+                uint8_t p00 = srcSlice[0][linTopFurther * srcWidth + colLeftFurther];
+                uint8_t p10 = srcSlice[0][linTopFurther * srcWidth + colLeft];
+                uint8_t p20 = srcSlice[0][linTopFurther * srcWidth + colRight];
+                uint8_t p30 = srcSlice[0][linTopFurther * srcWidth + colRightFurther];
+
+                // 2nd row
+                uint8_t p01 = srcSlice[0][linTop * srcWidth + colLeftFurther];
+                uint8_t p11 = srcSlice[0][linTop * srcWidth + colLeft];
+                uint8_t p21 = srcSlice[0][linTop * srcWidth + colRight];
+                uint8_t p31 = srcSlice[0][linTop * srcWidth + colRightFurther];
+
+                // 3rd row
+                uint8_t p02 = srcSlice[0][linBottom * srcWidth + colLeftFurther];
+                uint8_t p12 = srcSlice[0][linBottom * srcWidth + colLeft];
+                uint8_t p22 = srcSlice[0][linBottom * srcWidth + colRight];
+                uint8_t p32 = srcSlice[0][linBottom * srcWidth + colRightFurther];
+
+                // 4th row
+                uint8_t p03 = srcSlice[0][linBottomFurther * srcWidth + colLeftFurther];
+                uint8_t p13 = srcSlice[0][linBottomFurther * srcWidth + colLeft];
+                uint8_t p23 = srcSlice[0][linBottomFurther * srcWidth + colRight];
+                uint8_t p33 = srcSlice[0][linBottomFurther * srcWidth + colRightFurther];
+
+                // Bilinear interpolation operation
+                // Y
+                float col0 = cubicInterpolate(p00, p10, p20, p30, colDist);
+                float col1 = cubicInterpolate(p01, p11, p21, p31, colDist);
+                float col2 = cubicInterpolate(p02, p12, p22, p32, colDist);
+                float col3 = cubicInterpolate(p03, p13, p23, p33, colDist);
+                float value = cubicInterpolate(col0, col1, col2, col3, linDist);
+
+                /*dstSlice[0][lin * dstWidth + col] = double2uint8_t(
+                    (p00 * colDist * colDist * colDist +
+                     p10 * colDist * colDist +
+                     p20 * colDist +
+                     p30) * linDist * linDist * linDist +
+                     (p01 * colDist * colDist * colDist +
+                      p11 * colDist * colDist +
+                      p21 * colDist +
+                      p31) * linDist * linDist +
+                      (p02 * colDist * colDist * colDist +
+                       p12 * colDist * colDist +
+                       p22 * colDist +
+                       p32) * linDist +
+                       (p03 * colDist * colDist * colDist +
+                        p13 * colDist * colDist +
+                        p23 * colDist +
+                        p33));*/
+
+                dstSlice[0][lin * dstWidth + col] = value;
+            }
+        }
 
         return 0;
     }

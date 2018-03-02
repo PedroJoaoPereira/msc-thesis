@@ -103,16 +103,17 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
 }
 
 // Limit a value to a defined interval
-int clamp(int val, int min, int max){
+int clamp(float val, int min, int max){
     if(val < min)
         return min;
     else if(val > max)
         return max;
     else
-        return val;
+        return int(val);
 }
 
-// Interpolate a value between two points
-float lerp(float valA, float valB, float dist){
-    return valA * (1.0f - dist) + valB * dist;
+// Convert a double to an uint8_t
+uint8_t double2uint8_t(double value){
+    value += 6755399441055744.0;
+    return reinterpret_cast<uint8_t&>(value);
 }
