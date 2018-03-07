@@ -102,14 +102,20 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
     return 0;
 }
 
+// Limit a pixel index value to a defined interval
+void clampPixel(int &index, int min, int max){
+    if(index < min)
+        index = min;
+    else if(index > max)
+        index = max;
+}
+
 // Limit a value to a defined interval
-int clamp(float val, int min, int max){
+void clamp(double &val, double min, double max){
     if(val < min)
-        return min;
+        val = min;
     else if(val > max)
-        return max;
-    else
-        return int(val);
+        val = max;
 }
 
 // Convert a double to an uint8_t

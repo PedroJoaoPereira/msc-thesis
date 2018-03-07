@@ -2,6 +2,41 @@
 
 #include "Common.h"
 
+void getPixel(uint8_t** data, int channel, int width, int height, int lin, int col, uint8_t* pixelVal){
+    // Clamp coords
+    clampPixel(lin, 0, height - 1);
+    clampPixel(col, 0, width - 1);
+
+    // Assigns correct value to return
+    *pixelVal = data[channel][lin * width + col];
+}
+
+double bcoef(double x){
+    /*
+    // For a = -0.5
+    double xRounded = abs(x);
+    if(xRounded <= 1.0){
+        return xRounded * xRounded * (1.5 * xRounded - 2.5) + 1.0;
+    } else if(xRounded < 2.0){
+        return xRounded * (xRounded * (-0.5 * xRounded + 2.5) - 4.0) + 2.0;
+    } else{
+        return 0.0;
+    }
+    */
+
+    // For a = -0.5
+    double a = -0.57;
+    //double a = -0.6;
+    double xRounded = abs(x);
+    if(xRounded <= 1.0){
+        return (a + 2.0) * xRounded * xRounded * xRounded - (a + 3.0) * xRounded * xRounded + 1.0;
+    } else if(xRounded < 2.0){
+        return a * xRounded * xRounded * xRounded - 5.0 * a * xRounded * xRounded + 8.0 * a * xRounded - 4.0 * a;
+    } else{
+        return 0.0;
+    }
+}
+
 // Resampler sequential method
 int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
                   int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]);
@@ -15,12 +50,6 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
 int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
                int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[],
                int operation);
-
-
-
-float cubicInterpolate(uint8_t valA, uint8_t valB, uint8_t valC, uint8_t valD, float dist){
-    return valB + 0.5f * dist * (valC - valA + dist * (2.0f * valA - 5.0f * valB + 4.0f * valC - valD + dist * (3.0f * (valB - valC) + valD - valA)));
-}
 
 int sequential_scale(ImageInfo src, ImageInfo dst, int operation){
     // Variables used
@@ -221,10 +250,11 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
               int operation){
 
     // Get scale ratios
-    float scaleHeightRatio = static_cast<float>(dstHeight / srcHeight);
-    float scaleWidthRatio = static_cast<float>(dstWidth / srcWidth);
+    double scaleHeightRatio = static_cast<double>(dstHeight) / srcHeight;
+    double scaleWidthRatio = static_cast<double>(dstWidth) / srcWidth;
 
     if(operation == SWS_BILINEAR){
+        /*
         // Iterate through each line
         for(int lin = 0; lin < dstHeight; lin++){
             // Original coordinates
@@ -287,6 +317,7 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
                     bottomRatio);
             }
         }
+        */
 
         return 0;
     }
@@ -295,89 +326,57 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
         // Iterate through each line
         for(int lin = 0; lin < dstHeight; lin++){
             // Original coordinates
-            float linInOriginal = (lin - 0.5) / scaleHeightRatio;
+            double linInOriginal = (lin + 0.5) / scaleHeightRatio;
+            // Original lin index
+            double linIndexOriginalD = floor(linInOriginal);
+            int linIndexOriginal = double2uint8_t(linIndexOriginalD);
+            // Calculate distance to the original pixel
+            double linDist = abs(linInOriginal - (linIndexOriginalD + 0.5));
 
-            // Calculate original pixels coordinates to interpolate
-            int linTopFurther = clamp(floor(linInOriginal - 1), 0, srcHeight - 1);
-            int linTop = clamp(floor(linInOriginal), 0, srcHeight - 1);
-            int linBottom = clamp(ceil(linInOriginal), 0, srcHeight - 1);
-            int linBottomFurther = clamp(ceil(linInOriginal + 1), 0, srcHeight - 1);
-
-            // Calculate distance to the top left pixel
-            float linDist = linInOriginal - linTop;
+            // Calculate neighboring pixels coords
+            int linMin = linIndexOriginal - 1;
+            int linMax = linIndexOriginal + 2;
 
             // Iterate through each column
             for(int col = 0; col < dstWidth; col++){
                 // Original coordinates
-                float colInOriginal = (col - 0.5) / scaleWidthRatio;
+                double colInOriginal = (col + 0.5) / scaleWidthRatio;
+                // Original col index
+                double colIndexOriginalD = floor(colInOriginal);
+                int colIndexOriginal = double2uint8_t(colIndexOriginalD);
+                // Calculate distance to the original pixel
+                double colDist = abs(colInOriginal - (colIndexOriginalD + 0.5));
 
-                // Calculate original pixels coordinates to interpolate
-                int colLeftFurther = clamp(floor(colInOriginal - 1), 0, srcWidth - 1);
-                int colLeft = clamp(floor(colInOriginal), 0, srcWidth - 1);
-                int colRight = clamp(ceil(colInOriginal), 0, srcWidth - 1);
-                int colRightFurther = clamp(ceil(colInOriginal + 1), 0, srcWidth - 1);
+                // Calculate neighboring pixels coords
+                int colMin = colIndexOriginal - 1;
+                int colMax = colIndexOriginal + 2;
 
-                // Calculate distance to the top left pixel
-                float colDist = colInOriginal - colLeft;
+                double weightedValue = 0.0, sum = 0.0, wSum = 0.0;
+                uint8_t* colorHolder = new uint8_t();
+                double weight;
+                // Iterate through each neighboring pixels
+                for(int linTemp = linMin; linTemp <= linMax; linTemp++){
+                    for(int colTemp = colMin; colTemp <= colMax; colTemp++){
+                        // Retreive pixel from data buffer
+                        getPixel(srcSlice, 0, srcWidth, srcHeight, linTemp, colTemp, colorHolder);
+                        // Calculate weight of pixel in the bicubic interpolation
+                        weight = bcoef(abs(linInOriginal - (static_cast<double>(linTemp) + 0.5)))
+                            * bcoef(abs(colInOriginal - (static_cast<double>(colTemp) + 0.5)));
+                        // Calculate weighted value
+                        weightedValue = *colorHolder * weight;
+                        // Sum weighted values
+                        sum += weightedValue;
+                        // Sum weights
+                        wSum += weight;
+                    }                    
+                }
 
-                // Calculate weight of neighboring pixels
-                float leftRatio = 1 - colDist;
-                float rightRatio = colDist;
-                float topRatio = 1 - linDist;
-                float bottomRatio = linDist;
-
-                // Gets the original pixels values
-                // 1st row
-                uint8_t p00 = srcSlice[0][linTopFurther * srcWidth + colLeftFurther];
-                uint8_t p10 = srcSlice[0][linTopFurther * srcWidth + colLeft];
-                uint8_t p20 = srcSlice[0][linTopFurther * srcWidth + colRight];
-                uint8_t p30 = srcSlice[0][linTopFurther * srcWidth + colRightFurther];
-
-                // 2nd row
-                uint8_t p01 = srcSlice[0][linTop * srcWidth + colLeftFurther];
-                uint8_t p11 = srcSlice[0][linTop * srcWidth + colLeft];
-                uint8_t p21 = srcSlice[0][linTop * srcWidth + colRight];
-                uint8_t p31 = srcSlice[0][linTop * srcWidth + colRightFurther];
-
-                // 3rd row
-                uint8_t p02 = srcSlice[0][linBottom * srcWidth + colLeftFurther];
-                uint8_t p12 = srcSlice[0][linBottom * srcWidth + colLeft];
-                uint8_t p22 = srcSlice[0][linBottom * srcWidth + colRight];
-                uint8_t p32 = srcSlice[0][linBottom * srcWidth + colRightFurther];
-
-                // 4th row
-                uint8_t p03 = srcSlice[0][linBottomFurther * srcWidth + colLeftFurther];
-                uint8_t p13 = srcSlice[0][linBottomFurther * srcWidth + colLeft];
-                uint8_t p23 = srcSlice[0][linBottomFurther * srcWidth + colRight];
-                uint8_t p33 = srcSlice[0][linBottomFurther * srcWidth + colRightFurther];
-
-                // Bilinear interpolation operation
-                // Y
-                float col0 = cubicInterpolate(p00, p10, p20, p30, colDist);
-                float col1 = cubicInterpolate(p01, p11, p21, p31, colDist);
-                float col2 = cubicInterpolate(p02, p12, p22, p32, colDist);
-                float col3 = cubicInterpolate(p03, p13, p23, p33, colDist);
-                float value = cubicInterpolate(col0, col1, col2, col3, linDist);
-
-                /*dstSlice[0][lin * dstWidth + col] = double2uint8_t(
-                    (p00 * colDist * colDist * colDist +
-                     p10 * colDist * colDist +
-                     p20 * colDist +
-                     p30) * linDist * linDist * linDist +
-                     (p01 * colDist * colDist * colDist +
-                      p11 * colDist * colDist +
-                      p21 * colDist +
-                      p31) * linDist * linDist +
-                      (p02 * colDist * colDist * colDist +
-                       p12 * colDist * colDist +
-                       p22 * colDist +
-                       p32) * linDist +
-                       (p03 * colDist * colDist * colDist +
-                        p13 * colDist * colDist +
-                        p23 * colDist +
-                        p33));*/
-
-                dstSlice[0][lin * dstWidth + col] = value;
+                // Calculate resulting color
+                double result = sum / wSum;
+                // Clamp value to avoid color undershooting and overshooting
+                clamp(result, 0.0, 255.0);
+                // Store the result value
+                dstSlice[0][lin * dstWidth + col] = round(result);
             }
         }
 
