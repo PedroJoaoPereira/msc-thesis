@@ -25,8 +25,8 @@ double bcoef(double x){
     */
 
     // For a = -0.5
-    double a = -0.57;
-    //double a = -0.6;
+    //double a = -0.57;
+    double a = -0.6;
     double xRounded = abs(x);
     if(xRounded <= 1.0){
         return (a + 2.0) * xRounded * xRounded * xRounded - (a + 3.0) * xRounded * xRounded + 1.0;
@@ -42,8 +42,8 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
                   int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]);
 
 // Sequential scale method
-int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
-                  int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[],
+int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
+                  int dstWidth, int dstHeight, uint8_t* dstSlice[],
                   int operation);
 
 // Prepares the scaling operation
@@ -56,7 +56,6 @@ int sequential_scale(ImageInfo src, ImageInfo dst, int operation){
     int retVal = -1, duration = -1;
     uint8_t* srcBuffer, *dstBuffer;
     AVFrame* srcFrame, *dstFrame;
-    SwsContext* swsContext;
     high_resolution_clock::time_point initTime, stopTime;
 
     // Read image from a file
@@ -241,17 +240,70 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         return 0;
     }
 
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_GBRP){
+        // Calculate once
+        long numElements = srcStride[0] * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index++){
+            uint8_t y = srcSlice[0][index];         // Y
+            uint8_t cb = srcSlice[1][index / 2];    // U
+            uint8_t cr = srcSlice[2][index / 2];    // V
+
+            double rd = static_cast<double>(y) + 1.402 * (static_cast<double>(cr) - 128);
+            double gd = static_cast<double>(y) - 0.344 * (static_cast<double>(cb) - 128) - 0.714 * (static_cast<double>(cr) - 128);
+            double bd = static_cast<double>(y) + 1.772 * (static_cast<double>(cb) - 128);
+
+            //clamp(rd, 0.0, 255.0);
+            //clamp(gd, 0.0, 255.0);
+            //clamp(bd, 0.0, 255.0);
+
+            dstSlice[0][index] = round(rd); // R
+            dstSlice[1][index] = round(gd); // G
+            dstSlice[2][index] = round(bd); // B
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_GBRP && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Calculate once
+        long numElements = srcStride[0] * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index++){
+            uint8_t r = srcSlice[0][index]; // R
+            uint8_t g = srcSlice[1][index]; // G
+            uint8_t b = srcSlice[2][index]; // B
+
+            double y = 0.299 * static_cast<double>(r) + 0.587 * static_cast<double>(g) + 0.114 * static_cast<double>(b) + 0;
+            double cb = -0.169 * static_cast<double>(r) - 0.331 * static_cast<double>(g) + 0.499 * static_cast<double>(b) + 128;
+            double cr = 0.499 * static_cast<double>(r) - 0.418 * static_cast<double>(g) - 0.0813 * static_cast<double>(b) + 128;
+
+            dstSlice[0][index] = round(y);          // Y
+
+            if(index % 2 == 0){
+                dstSlice[1][index / 2] = round(cb); // U
+                dstSlice[2][index / 2] = round(cr); // V
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
     cerr << "Conversion not supported" << endl;
     return -1;
 }
 
-int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
-              int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[],
+int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
+              int dstWidth, int dstHeight, uint8_t* dstSlice[],
               int operation){
 
     // Get scale ratios
-    double scaleHeightRatio = static_cast<double>(dstHeight) / srcHeight;
-    double scaleWidthRatio = static_cast<double>(dstWidth) / srcWidth;
+    float scaleHeightRatio = static_cast<float>(dstHeight) / srcHeight;
+    float scaleWidthRatio = static_cast<float>(dstWidth) / srcWidth;
 
     if(operation == SWS_BILINEAR){
         /*
@@ -326,12 +378,12 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
         // Iterate through each line
         for(int lin = 0; lin < dstHeight; lin++){
             // Original coordinates
-            double linInOriginal = (lin + 0.5) / scaleHeightRatio;
+            float linInOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio;
             // Original lin index
-            double linIndexOriginalD = floor(linInOriginal);
-            int linIndexOriginal = double2uint8_t(linIndexOriginalD);
+            float linIndexOriginalF = floor(linInOriginal);
+            int linIndexOriginal = float2uint8_t(linIndexOriginalF);
             // Calculate distance to the original pixel
-            double linDist = abs(linInOriginal - (linIndexOriginalD + 0.5));
+            float verticalDistance = abs(linInOriginal - linIndexOriginalF + 0.5f);
 
             // Calculate neighboring pixels coords
             int linMin = linIndexOriginal - 1;
@@ -340,46 +392,51 @@ int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t
             // Iterate through each column
             for(int col = 0; col < dstWidth; col++){
                 // Original coordinates
-                double colInOriginal = (col + 0.5) / scaleWidthRatio;
+                float colInOriginal = (static_cast<float>(col) + 0.5f) / scaleWidthRatio;
                 // Original col index
-                double colIndexOriginalD = floor(colInOriginal);
-                int colIndexOriginal = double2uint8_t(colIndexOriginalD);
+                float colIndexOriginalF = floor(colInOriginal);
+                int colIndexOriginal = float2uint8_t(colIndexOriginalF);
                 // Calculate distance to the original pixel
-                double colDist = abs(colInOriginal - (colIndexOriginalD + 0.5));
+                float horizontalDistance = abs(colInOriginal - colIndexOriginalF + 0.5f);
 
                 // Calculate neighboring pixels coords
                 int colMin = colIndexOriginal - 1;
                 int colMax = colIndexOriginal + 2;
 
-                double weightedValue = 0.0, sum = 0.0, wSum = 0.0;
-                uint8_t* colorHolder = new uint8_t();
-                double weight;
-                // Iterate through each neighboring pixels
-                for(int linTemp = linMin; linTemp <= linMax; linTemp++){
-                    for(int colTemp = colMin; colTemp <= colMax; colTemp++){
-                        // Retreive pixel from data buffer
-                        getPixel(srcSlice, 0, srcWidth, srcHeight, linTemp, colTemp, colorHolder);
-                        // Calculate weight of pixel in the bicubic interpolation
-                        weight = bcoef(abs(linInOriginal - (static_cast<double>(linTemp) + 0.5)))
-                            * bcoef(abs(colInOriginal - (static_cast<double>(colTemp) + 0.5)));
-                        // Calculate weighted value
-                        weightedValue = *colorHolder * weight;
-                        // Sum weighted values
-                        sum += weightedValue;
-                        // Sum weights
-                        wSum += weight;
-                    }                    
-                }
+                // Temporary variables used in the bicubic interpolation
+                uint8_t colorHolder;
+                float sum, wSum, weight;
+                // Iterate through each color channel
+                for(int colorChannel = 0; colorChannel < 3; colorChannel++){
+                    // Reset temporary values
+                    sum = 0.f, wSum = 0.f;
+                    // Iterate through each row of neighboring pixels
+                    for(int linTemp = linMin; linTemp <= linMax; linTemp++){
+                        // Iterate through each of the neighboring pixels
+                        for(int colTemp = colMin; colTemp <= colMax; colTemp++){
+                            // Retreive pixel from data buffer
+                            getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linTemp, colTemp, &colorHolder);
+                            // Calculate weight of pixel in the bicubic interpolation
+                            weight = bcoef(abs(linInOriginal - (static_cast<float>(linTemp) + 0.5f)))
+                                * bcoef(abs(colInOriginal - (static_cast<float>(colTemp) + 0.5f)));
+                            // Sum weighted values
+                            sum += static_cast<float>(colorHolder) * weight;
+                            // Sum weights
+                            wSum += weight;
+                        }
+                    }
 
-                // Calculate resulting color
-                double result = sum / wSum;
-                // Clamp value to avoid color undershooting and overshooting
-                clamp(result, 0.0, 255.0);
-                // Store the result value
-                dstSlice[0][lin * dstWidth + col] = round(result);
+                    // Calculate resulting color
+                    float result = sum / wSum;
+                    // Clamp value to avoid color undershooting and overshooting
+                    clamp(result, 0.0f, 255.0f);
+                    // Store the result value
+                    dstSlice[colorChannel][lin * dstWidth + col] = float2uint8_t(result);
+                }
             }
         }
 
+        // Success
         return 0;
     }
 
@@ -393,7 +450,8 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
 
     // Variables used
     int retVal = -1;
-    AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_YUV444P;
+    //AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_YUV444P;
+    AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_GBRP;
     uint8_t* resampleTempFrameBuffer,* scaleTempFrameBuffer;
     AVFrame* resampleTempFrame,* scaleTempFrame;
 
@@ -465,8 +523,8 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
     }
 
     // Apply the scaling operation
-    retVal = seq_scale(srcWidth, srcHeight, scalingSupportedFormat, resampleTempFrame->data, resampleTempFrame->linesize,
-                       dstWidth, dstHeight, scalingSupportedFormat, scaleTempFrame->data, scaleTempFrame->linesize,
+    retVal = seq_scale(srcWidth, srcHeight, resampleTempFrame->data,
+                       dstWidth, dstHeight, scaleTempFrame->data,
                        operation);
     if(retVal < 0){
         av_frame_free(&resampleTempFrame);
