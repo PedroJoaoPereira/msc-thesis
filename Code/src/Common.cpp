@@ -120,6 +120,10 @@ void clamp(float &val, float min, float max){
 
 // Convert a float to an uint8_t
 uint8_t float2uint8_t(float value){
-    value += 0.5f;
-    return static_cast<uint8_t>(value);
+    return static_cast<uint8_t>(value + 0.5f - (value < 0.f));
+}
+
+// Convert a float to an int
+int float2int(float value){
+    return static_cast<int>(value + 0.5f - (value < 0.f));
 }

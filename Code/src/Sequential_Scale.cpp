@@ -11,29 +11,15 @@ void getPixel(uint8_t** data, int channel, int width, int height, int lin, int c
     *pixelVal = data[channel][lin * width + col];
 }
 
-double bcoef(double x){
-    /*
-    // For a = -0.5
-    double xRounded = abs(x);
-    if(xRounded <= 1.0){
-        return xRounded * xRounded * (1.5 * xRounded - 2.5) + 1.0;
-    } else if(xRounded < 2.0){
-        return xRounded * (xRounded * (-0.5 * xRounded + 2.5) - 4.0) + 2.0;
+float bcoef(float x){
+    float a = -0.6f;
+    float xRounded = abs(x);
+    if(xRounded <= 1.0f){
+        return (a + 2.0f) * xRounded * xRounded * xRounded - (a + 3.0f) * xRounded * xRounded + 1.0f;
+    } else if(xRounded < 2.0f){
+        return a * xRounded * xRounded * xRounded - 5.0f * a * xRounded * xRounded + 8.0f * a * xRounded - 4.0f * a;
     } else{
-        return 0.0;
-    }
-    */
-
-    // For a = -0.5
-    //double a = -0.57;
-    double a = -0.6;
-    double xRounded = abs(x);
-    if(xRounded <= 1.0){
-        return (a + 2.0) * xRounded * xRounded * xRounded - (a + 3.0) * xRounded * xRounded + 1.0;
-    } else if(xRounded < 2.0){
-        return a * xRounded * xRounded * xRounded - 5.0 * a * xRounded * xRounded + 8.0 * a * xRounded - 4.0 * a;
-    } else{
-        return 0.0;
+        return 0.0f;
     }
 }
 
@@ -210,12 +196,8 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         // Loop through each pixel
         for(int index = 0; index < numElements; index++){
             dstSlice[0][index] = srcSlice[0][index];        // Y
-
             dstSlice[1][index] = srcSlice[1][index / 2];    // U
-            dstSlice[1][index] = srcSlice[1][index / 2];
-
             dstSlice[2][index] = srcSlice[2][index / 2];    // V
-            dstSlice[2][index] = srcSlice[2][index / 2];
         }
 
         // Success
@@ -306,107 +288,100 @@ int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
     float scaleWidthRatio = static_cast<float>(dstWidth) / srcWidth;
 
     if(operation == SWS_BILINEAR){
-        /*
-        // Iterate through each line
+        // Iterate through each line of the scaled image
         for(int lin = 0; lin < dstHeight; lin++){
-            // Original coordinates
-            float linInOriginal = (lin - 0.5) / scaleHeightRatio;
+            // Scaled image line coordinates in the original image
+            float linOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio - 0.5f;
+            // Original line index coordinate
+            float linOriginalIndex = floor(linOriginal);
+            int linOriginalIndexRounded = float2int(linOriginalIndex);
 
-            // Calculate original pixels coordinates to interpolate
-            int linTop = clamp(floor(linInOriginal), 0, srcHeight - 1);
-            int linBottom = clamp(ceil(linInOriginal), 0, srcHeight - 1);
+            // Calculate original line coordinates of the pixels to interpolate
+            int linThresholdMax = srcHeight - 1;
+            int linMin = linOriginalIndex;
+            clampPixel(linMin, 0, linThresholdMax);
+            int linMax = linOriginalIndex + 1;
+            clampPixel(linMax, 0, linThresholdMax);
 
-            // Calculate distance to the top left pixel
-            float linDist = linInOriginal - linTop;
+            // Calculate distance of the scaled coordinate to the original
+            float verticalDistance = linOriginal - static_cast<float>(linMin);
 
-            // Iterate through each column
+            // Calculate the weight of original pixels
+            float linMinDistance = 1.f - verticalDistance;
+            float linMaxDistance = verticalDistance;
+
+            // Iterate through each column of the scaled image
             for(int col = 0; col < dstWidth; col++){
-                // Original coordinates
-                float colInOriginal = (col - 0.5) / scaleWidthRatio;
+                // Scaled image column coordinates in the original image
+                float colOriginal = (static_cast<float>(col) + 0.5f) / scaleWidthRatio - 0.5f;
+                // Original column index coordinate
+                float colOriginalIndex = floor(colOriginal);
+                int colOriginalIndexRounded = float2int(colOriginalIndex);
 
-                // Calculate original pixels coordinates to interpolate
-                int colLeft = clamp(floor(colInOriginal), 0, srcWidth - 1);
-                int colRight = clamp(ceil(colInOriginal), 0, srcWidth - 1);
+                // Calculate original column coordinates of the pixels to interpolate
+                int colThresholdMax = srcWidth - 1;
+                int colMin = colOriginalIndex;
+                clampPixel(colMin, 0, colThresholdMax);
+                int colMax = colOriginalIndex + 1;
+                clampPixel(colMax, 0, colThresholdMax);
 
-                // Calculate distance to the top left pixel
-                float colDist = colInOriginal - colLeft;
+                // Calculate distance of the scaled coordinate to the original
+                float horizontalDistance = colOriginal - static_cast<float>(colMin);
 
-                // Calculate weight of neighboring pixels
-                float leftRatio = 1 - colDist;
-                float rightRatio = colDist;
-                float topRatio = 1 - linDist;
-                float bottomRatio = linDist;
+                // Calculate the weight of original pixels
+                float colMinDistance = 1.f - horizontalDistance;
+                float colMaxDistance = horizontalDistance;
 
-                // Bilinear interpolation operation
-                // Y
-                dstSlice[0][lin * dstWidth + col] = double2uint8_t(
-                    (srcSlice[0][linTop * srcWidth + colLeft] * leftRatio +
-                     srcSlice[0][linTop * srcWidth + colRight] * rightRatio) *
-                    topRatio +
-                    (srcSlice[0][linBottom * srcWidth + colLeft] *
-                     leftRatio + srcSlice[0][linBottom * srcWidth + colRight] *
-                     rightRatio) *
-                    bottomRatio);
-
-                // U
-                dstSlice[1][lin * dstWidth + col] = double2uint8_t(
-                    (srcSlice[1][linTop * srcWidth + colLeft] * leftRatio +
-                     srcSlice[1][linTop * srcWidth + colRight] * rightRatio) *
-                    topRatio +
-                    (srcSlice[1][linBottom * srcWidth + colLeft] *
-                     leftRatio + srcSlice[1][linBottom * srcWidth + colRight] *
-                     rightRatio) *
-                    bottomRatio);
-
-                // V
-                dstSlice[2][lin * dstWidth + col] = double2uint8_t(
-                    (srcSlice[2][linTop * srcWidth + colLeft] * leftRatio +
-                     srcSlice[2][linTop * srcWidth + colRight] * rightRatio) *
-                    topRatio +
-                    (srcSlice[2][linBottom * srcWidth + colLeft] *
-                     leftRatio + srcSlice[2][linBottom * srcWidth + colRight] *
-                     rightRatio) *
-                    bottomRatio);
+                // Temporary variables used in the bilinear interpolation
+                uint8_t colorTopLeft, colorTopRight, colorBottomLeft, colorBottomRight;
+                // Bilinear interpolation operation for each color channel
+                for(int colorChannel = 0; colorChannel < 3; colorChannel++){
+                    // Retrieve pixel from data buffer
+                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMin, colMin, &colorTopLeft);
+                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMin, colMax, &colorTopRight);
+                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMax, colMin, &colorBottomLeft);
+                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMax, colMax, &colorBottomRight);
+                    // Interpolate and store value
+                    dstSlice[colorChannel][lin * dstWidth + col] = float2uint8_t(
+                        (static_cast<float>(colorTopLeft) * colMinDistance + static_cast<float>(colorTopRight) * colMaxDistance) * linMinDistance + 
+                        (static_cast<float>(colorBottomLeft) * colMinDistance + static_cast<float>(colorBottomRight) * colMaxDistance) * linMaxDistance);
+                }
             }
         }
-        */
 
+        // Success
         return 0;
     }
 
     if(operation == SWS_BICUBIC){
-        // Iterate through each line
+        // Iterate through each line of the scaled image
         for(int lin = 0; lin < dstHeight; lin++){
-            // Original coordinates
-            float linInOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio;
-            // Original lin index
-            float linIndexOriginalF = floor(linInOriginal);
-            int linIndexOriginal = float2uint8_t(linIndexOriginalF);
-            // Calculate distance to the original pixel
-            float verticalDistance = abs(linInOriginal - linIndexOriginalF + 0.5f);
+            // Scaled image line coordinates in the original image
+            float linOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio;
+            // Original line index coordinate
+            float linOriginalIndex = floor(linOriginal);
+            int linOriginalIndexRounded = float2int(linOriginalIndex);
 
-            // Calculate neighboring pixels coords
-            int linMin = linIndexOriginal - 1;
-            int linMax = linIndexOriginal + 2;
+            // Calculate original line coordinates of the pixels to interpolate
+            int linMin = linOriginalIndexRounded - 1;
+            int linMax = linOriginalIndexRounded + 2;
 
-            // Iterate through each column
+            // Iterate through each column of the scaled image
             for(int col = 0; col < dstWidth; col++){
-                // Original coordinates
-                float colInOriginal = (static_cast<float>(col) + 0.5f) / scaleWidthRatio;
-                // Original col index
-                float colIndexOriginalF = floor(colInOriginal);
-                int colIndexOriginal = float2uint8_t(colIndexOriginalF);
-                // Calculate distance to the original pixel
-                float horizontalDistance = abs(colInOriginal - colIndexOriginalF + 0.5f);
+                // Scaled image column coordinates in the original image
+                float colOriginal = (static_cast<float>(col) + 0.5f) / scaleWidthRatio;
+                // Original column index coordinate
+                float colOriginalIndex = floor(colOriginal);
+                int colOriginalIndexRounded = float2int(colOriginalIndex);
 
-                // Calculate neighboring pixels coords
-                int colMin = colIndexOriginal - 1;
-                int colMax = colIndexOriginal + 2;
+                // Calculate original column coordinates of the pixels to interpolate
+                int colMin = colOriginalIndexRounded - 1;
+                int colMax = colOriginalIndexRounded + 2;
 
                 // Temporary variables used in the bicubic interpolation
                 uint8_t colorHolder;
                 float sum, wSum, weight;
-                // Iterate through each color channel
+                // Bicubic interpolation operation for each color channel
                 for(int colorChannel = 0; colorChannel < 3; colorChannel++){
                     // Reset temporary values
                     sum = 0.f, wSum = 0.f;
@@ -414,12 +389,12 @@ int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
                     for(int linTemp = linMin; linTemp <= linMax; linTemp++){
                         // Iterate through each of the neighboring pixels
                         for(int colTemp = colMin; colTemp <= colMax; colTemp++){
-                            // Retreive pixel from data buffer
+                            // Retrieve pixel from data buffer
                             getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linTemp, colTemp, &colorHolder);
                             // Calculate weight of pixel in the bicubic interpolation
-                            weight = bcoef(abs(linInOriginal - (static_cast<float>(linTemp) + 0.5f)))
-                                * bcoef(abs(colInOriginal - (static_cast<float>(colTemp) + 0.5f)));
-                            // Sum weighted values
+                            weight = bcoef(abs(linOriginal - (static_cast<float>(linTemp) + 0.5f)))
+                                * bcoef(abs(colOriginal - (static_cast<float>(colTemp) + 0.5f)));
+                            // Sum weighted color values
                             sum += static_cast<float>(colorHolder) * weight;
                             // Sum weights
                             wSum += weight;
@@ -450,8 +425,8 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
 
     // Variables used
     int retVal = -1;
-    //AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_YUV444P;
-    AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_GBRP;
+    AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_YUV444P;
+    //AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_GBRP;
     uint8_t* resampleTempFrameBuffer,* scaleTempFrameBuffer;
     AVFrame* resampleTempFrame,* scaleTempFrame;
 
@@ -461,11 +436,11 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         return -1;
     }
     if(srcWidth % 2 != 0 || srcHeight % 2 != 0 || dstWidth % 2 != 0 || dstHeight % 2 != 0){
-        cerr << "One of input dimensions is not divisible by 2!" << endl;
+        cerr << "One of the input dimensions is not divisible by 2!" << endl;
         return -1;
     }
     if(!srcSlice || !srcStride || !dstSlice || !dstStride){
-        cerr << "One of input parameters is null!" << endl;
+        cerr << "One of the input parameters is null!" << endl;
         return -1;
     }
 
@@ -481,28 +456,13 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         return retVal;
     }
 
-    // Verify if image is in right format to scale
-    if(srcPixelFormat != scalingSupportedFormat){
-        // Resamples image to a supported format
-        retVal = seq_resampler(srcWidth, srcHeight, srcPixelFormat, srcSlice, srcStride,
-                               srcWidth, srcHeight, scalingSupportedFormat, resampleTempFrame->data, resampleTempFrame->linesize);
-        if(retVal < 0){
-            av_frame_free(&resampleTempFrame);
-            free(resampleTempFrameBuffer);
-            return retVal;
-        }
-    } else{
-        // Copy data from source frame to temp frame
-        resampleTempFrame->data[0] = srcSlice[0];
-        resampleTempFrame->data[1] = srcSlice[1];
-        resampleTempFrame->data[2] = srcSlice[2];
-        resampleTempFrame->data[3] = srcSlice[3];
-
-        // Copy linesize from source frame to temp frame
-        resampleTempFrame->linesize[0] = srcStride[0];
-        resampleTempFrame->linesize[1] = srcStride[1];
-        resampleTempFrame->linesize[2] = srcStride[2];
-        resampleTempFrame->linesize[3] = srcStride[3];
+    // Resamples image to a supported format
+    retVal = seq_resampler(srcWidth, srcHeight, srcPixelFormat, srcSlice, srcStride,
+                           srcWidth, srcHeight, scalingSupportedFormat, resampleTempFrame->data, resampleTempFrame->linesize);
+    if(retVal < 0){
+        av_frame_free(&resampleTempFrame);
+        free(resampleTempFrameBuffer);
+        return retVal;
     }
 
     // Prepare to initialize scaleTempFrame
@@ -534,20 +494,15 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         return retVal;
     }
 
-    if(dstPixelFormat != scalingSupportedFormat){
-        // Resamples results to the desired one
-        retVal = seq_resampler(dstWidth, dstHeight, scalingSupportedFormat, scaleTempFrame->data, scaleTempFrame->linesize,
-                               dstWidth, dstHeight, dstPixelFormat, dstSlice, dstStride);
-        if(retVal < 0){
-            av_frame_free(&resampleTempFrame);
-            free(resampleTempFrameBuffer);
-            av_frame_free(&scaleTempFrame);
-            free(scaleTempFrameBuffer);
-            return retVal;
-        }
-    } else{
-        // Copy data from scaleTempFrame to result frame
-        dstSlice = scaleTempFrame->data;
+    // Resamples results to the desired one
+    retVal = seq_resampler(dstWidth, dstHeight, scalingSupportedFormat, scaleTempFrame->data, scaleTempFrame->linesize,
+                           dstWidth, dstHeight, dstPixelFormat, dstSlice, dstStride);
+    if(retVal < 0){
+        av_frame_free(&resampleTempFrame);
+        free(resampleTempFrameBuffer);
+        av_frame_free(&scaleTempFrame);
+        free(scaleTempFrameBuffer);
+        return retVal;
     }
 
     // Free used resources
