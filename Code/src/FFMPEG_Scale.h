@@ -6,6 +6,7 @@
 #include <chrono>
 
 #include "ImageInfo.h"
+#include "Common.h"
 
 extern "C"{
 #define __STDC_CONSTANT_MACROS
