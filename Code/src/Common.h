@@ -69,4 +69,8 @@ void getPixel(uint8_t* data, int width, int height, int lin, int col, uint8_t* p
 // Get the bicubic coefficients
 float getBicubicCoef(float x);
 
+// AVPixelFormat inFormat	- pixel format of the source data
+// Return the temporary scale pixel format
+AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat);
+
 #endif

@@ -151,3 +151,27 @@ float getBicubicCoef(float x){
         return 0.0f;
     }
 }
+
+// Return the temporary scale pixel format
+AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat) {
+	// Retrieve the temporary scale format
+	switch (inFormat){
+	case AV_PIX_FMT_YUV444P:
+		return AV_PIX_FMT_YUV444P;
+	case AV_PIX_FMT_YUV422P:
+		return AV_PIX_FMT_YUV422P;
+	case AV_PIX_FMT_YUV420P:
+		return AV_PIX_FMT_YUV420P;
+	case AV_PIX_FMT_RGB24:
+		return AV_PIX_FMT_YUV444P;
+	case AV_PIX_FMT_UYVY422:
+		return AV_PIX_FMT_YUV422P;
+	case AV_PIX_FMT_NV12:
+		return AV_PIX_FMT_YUV420P;
+	default:
+		break;
+	}
+
+	// If the source pixel format is not supported
+	return AV_PIX_FMT_NONE;
+}

@@ -41,11 +41,11 @@ int main(){
 	img_nv12_1920x1080.loadImage();
 
     // DEBUG VARIABLES -------------------------------
-    ImageInfo inImg = img_rgb24_1920x1080;
+    ImageInfo inImg = img_uyvy422_1920x1080;
     int dstWidth = 1920;
     int dstHeight = 1080;
-	AVPixelFormat dstFormat = AV_PIX_FMT_YUV444P;
-	int operation = SWS_BICUBIC;
+	AVPixelFormat dstFormat = AV_PIX_FMT_YUV420P;
+	int operation = SWS_BILINEAR;
 
     int maxTestTimes = 5;
     bool testAverage = true;
