@@ -51,7 +51,7 @@ int main(){
     bool testAverage = true;
     bool testFfmpeg = true;
     bool testSequential = true;
-    bool testOpenmp = false;
+    bool testOpenmp = true;
 
     int avgAcc;
 
