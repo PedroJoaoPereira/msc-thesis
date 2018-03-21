@@ -82,34 +82,38 @@ int openmp_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
 
     // REORGANIZE COMPONENTS -------------------------
     if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_RGB24){
-        // Number of elements
-        long numElements = srcWidth * srcHeight;
+		// Number of elements
+		long numElements = srcWidth * srcHeight;
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            // Calculate once
-            int indexMul3 = index * 3;
+		// Loop through each pixel
+		for (int index = 0; index < numElements; index++) {
+			// Calculate once
+			int indexMul3 = index * 3;
 
-            float y = static_cast<float>(srcSlice[0][index]);	// Y
-            float u = static_cast<float>(srcSlice[1][index]);	// U
-            float v = static_cast<float>(srcSlice[2][index]);	// V
+			float y = static_cast<float>(srcSlice[0][index]);	// Y
+			float u = static_cast<float>(srcSlice[1][index]);	// U
+			float v = static_cast<float>(srcSlice[2][index]);	// V
 
-            float r = y + 1.402f * (v - 128.f);							// R
-            float g = y - 0.344f * (u - 128.f) - 0.714f * (v - 128.f);	// G
-            float b = y + 1.772f * (u - 128.f);							// B
+			y -= 16.f;
+			u -= 128.f;
+			v -= 128.f;
 
-            // Clamp values to avoid overshooting and undershooting
-            clamp(r, 0.f, 255.f);
-            clamp(g, 0.f, 255.f);
-            clamp(b, 0.f, 255.f);
+			float r = 1.164f * y + 0.f * u + 1.596f * v;
+			float g = 1.164f * y - 0.392f * u - 0.813f * v;
+			float b = 1.164f * y + 2.017f * u + 0.f * v;
 
-            dstSlice[0][indexMul3] = float2uint8_t(r);		// R
-            dstSlice[0][indexMul3 + 1] = float2uint8_t(g);	// G
-            dstSlice[0][indexMul3 + 2] = float2uint8_t(b);	// B
-        }
+			// Clamp values to avoid overshooting and undershooting
+			clamp(r, 0.f, 255.f);
+			clamp(g, 0.f, 255.f);
+			clamp(b, 0.f, 255.f);
 
-        // Success
-        return 0;
+			dstSlice[0][indexMul3] = float2uint8_t(r);		// R
+			dstSlice[0][indexMul3 + 1] = float2uint8_t(g);	// G
+			dstSlice[0][indexMul3 + 2] = float2uint8_t(b);	// B
+		}
+
+		// Success
+		return 0;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_YUV422P){
@@ -492,28 +496,32 @@ int openmp_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
     }
 
     if(srcPixelFormat == AV_PIX_FMT_RGB24 && dstPixelFormat == AV_PIX_FMT_YUV444P){
-        // Number of elements
-        long numElements = srcStride[0] * srcHeight;
+		// Number of elements
+		long numElements = srcStride[0] * srcHeight;
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            // Calculate once
-            int indexDiv3 = index / 3;
+		// Loop through each pixel
+		for (int index = 0; index < numElements; index++) {
+			// Calculate once
+			int indexDiv3 = index / 3;
 
-            float r = static_cast<float>(srcSlice[0][index]);	// R
-            float g = static_cast<float>(srcSlice[0][++index]);	// G
-            float b = static_cast<float>(srcSlice[0][++index]);	// B
+			float r = static_cast<float>(srcSlice[0][index]);	// R
+			float g = static_cast<float>(srcSlice[0][++index]);	// G
+			float b = static_cast<float>(srcSlice[0][++index]);	// B
 
-            dstSlice[0][indexDiv3] = float2uint8_t(0.299f * r + 0.587f * g + 0.114f * b);			// Y
-            dstSlice[1][indexDiv3] = float2uint8_t(-0.169f * r - 0.331f * g + 0.499f * b + 128.f);	// U
-            dstSlice[2][indexDiv3] = float2uint8_t(0.499f * r - 0.418f * g - 0.0813f * b + 128.f);	// V
-        }
+			float y = 0.257f * r + 0.504f*g + 0.098f*b + 16.f;	// Y
+			float u = -0.148f*r - 0.291f*g + 0.439f*b + 128.f;	// U
+			float v = 0.439f*r - 0.368f*g - 0.071f*b + 128.f;	// V
 
-        // Success
-        return 0;
+			dstSlice[0][indexDiv3] = float2uint8_t(y);	// Y
+			dstSlice[1][indexDiv3] = float2uint8_t(u);	// U
+			dstSlice[2][indexDiv3] = float2uint8_t(v);	// V
+		}
+
+		// Success
+		return 0;
     }
 
-    cerr << "Conversion not supported" << endl;
+    cerr << "[OPENMP] Conversion not supported" << endl;
     return -1;
 }
 
@@ -645,7 +653,7 @@ int openmp_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
         return 0;
     }
 
-    cerr << "Operation not supported" << endl;
+    cerr << "[OPENMP] Operation not supported" << endl;
     return -1;
 }
 
@@ -661,7 +669,7 @@ int openmp_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
     // Retrieve the temporary scaling pixel format
     AVPixelFormat scalingSupportedFormat = getTempScaleFormat(srcPixelFormat);
     if(scalingSupportedFormat == AV_PIX_FMT_NONE){
-        cerr << "Source pixel format is not supported" << endl;
+        cerr << "[OPENMP] Source pixel format is not supported" << endl;
         return -1;
     }
 

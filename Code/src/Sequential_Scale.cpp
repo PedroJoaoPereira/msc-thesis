@@ -94,9 +94,13 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 			float u = static_cast<float>(srcSlice[1][index]);	// U
 			float v = static_cast<float>(srcSlice[2][index]);	// V
 
-			float r = y + 1.402f * (v - 128.f);							// R
-			float g = y - 0.344f * (u - 128.f) - 0.714f * (v - 128.f);	// G
-			float b = y + 1.772f * (u - 128.f);							// B
+			y -= 16.f;
+			u -= 128.f;
+			v -= 128.f;
+
+			float r = 1.164f * y + 0.f * u + 1.596f * v;
+			float g = 1.164f * y - 0.392f * u - 0.813f * v;
+			float b = 1.164f * y + 2.017f * u + 0.f * v;
 
 			// Clamp values to avoid overshooting and undershooting
 			clamp(r, 0.f, 255.f);
@@ -495,16 +499,20 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 			float g = static_cast<float>(srcSlice[0][++index]);	// G
 			float b = static_cast<float>(srcSlice[0][++index]);	// B
 
-			dstSlice[0][indexDiv3] = float2uint8_t(0.299f * r + 0.587f * g + 0.114f * b);			// Y
-			dstSlice[1][indexDiv3] = float2uint8_t(-0.169f * r - 0.331f * g + 0.499f * b + 128.f);	// U
-			dstSlice[2][indexDiv3] = float2uint8_t(0.499f * r - 0.418f * g - 0.0813f * b + 128.f);	// V
+			float y = 0.257f * r + 0.504f*g + 0.098f*b + 16.f;	// Y
+			float u = -0.148f*r - 0.291f*g + 0.439f*b + 128.f;	// U
+			float v = 0.439f*r - 0.368f*g - 0.071f*b + 128.f;	// V
+
+			dstSlice[0][indexDiv3] = float2uint8_t(y);	// Y
+			dstSlice[1][indexDiv3] = float2uint8_t(u);	// U
+			dstSlice[2][indexDiv3] = float2uint8_t(v);	// V
 		}
 
 		// Success
 		return 0;
 	}
 
-    cerr << "Conversion not supported" << endl;
+    cerr << "[SEQUENTIAL] Conversion not supported" << endl;
     return -1;
 }
 
@@ -636,7 +644,7 @@ int sequential_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
         return 0;
     }
 
-    cerr << "Operation not supported" << endl;
+    cerr << "[SEQUENTIAL] Operation not supported" << endl;
     return -1;
 }
 
@@ -652,7 +660,7 @@ int sequential_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 	// Retrieve the temporary scaling pixel format
 	AVPixelFormat scalingSupportedFormat = getTempScaleFormat(srcPixelFormat);
 	if (scalingSupportedFormat == AV_PIX_FMT_NONE) {
-		cerr << "Source pixel format is not supported" << endl;
+		cerr << "[SEQUENTIAL] Source pixel format is not supported" << endl;
 		return -1;
 	}
 

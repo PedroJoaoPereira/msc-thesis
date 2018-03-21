@@ -2,6 +2,7 @@
 
 // Read image from a file
 int readImageFromFile(string fileName, uint8_t** dataBuffer){
+
     // Open input file
     FILE* inputFile = fopen(fileName.c_str(), "rb");
     if(!inputFile){
@@ -43,6 +44,7 @@ int readImageFromFile(string fileName, uint8_t** dataBuffer){
 
 // Write image to a file
 int writeImageToFile(string fileName, AVFrame** frame){
+
     // Opens output file
     FILE* outputFile = fopen(fileName.c_str(), "wb");
     if(!outputFile){
