@@ -105,37 +105,65 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
     return 0;
 }
 
-// Limit a pixel index value to a defined interval
-void clampPixel(int &index, int min, int max){
-    if(index < min)
-        index = min;
-    else if(index > max)
-        index = max;
+// Return if format is supported
+bool isSupportedFormat(AVPixelFormat format){
+    // Verify if supported format
+    switch(format){
+        case AV_PIX_FMT_YUV444P:
+        case AV_PIX_FMT_GBRP:
+        case AV_PIX_FMT_RGB24:
+        case AV_PIX_FMT_YUV422P:
+        case AV_PIX_FMT_YUV420P:
+        case AV_PIX_FMT_UYVY422:
+        case AV_PIX_FMT_NV12:
+            return true;
+        default:
+            break;
+    }
+
+    // Not a supported format
+    return false;
 }
 
-// Limit a value to a defined interval
-void clamp(float &val, float min, float max){
-    if(val < min)
-        val = min;
-    else if(val > max)
-        val = max;
+// Return the temporary scale pixel format
+AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat){
+    // Retrieve the temporary scale format
+    switch(inFormat){
+        case AV_PIX_FMT_YUV444P:
+            return AV_PIX_FMT_YUV444P;
+        case AV_PIX_FMT_YUV422P:
+            return AV_PIX_FMT_YUV422P;
+        case AV_PIX_FMT_YUV420P:
+            return AV_PIX_FMT_YUV420P;
+        case AV_PIX_FMT_RGB24:
+            return AV_PIX_FMT_YUV444P;
+        case AV_PIX_FMT_UYVY422:
+            return AV_PIX_FMT_YUV422P;
+        case AV_PIX_FMT_NV12:
+            return AV_PIX_FMT_YUV420P;
+        default:
+            break;
+    }
+
+    // If the source pixel format is not supported
+    return AV_PIX_FMT_NONE;
 }
 
-// Convert a float to an uint8_t
-uint8_t float2uint8_t(float value){
-    return static_cast<uint8_t>(value + 0.5f - (value < 0.f));
-}
 
-// Convert a float to an int
-int float2int(float value){
-    return static_cast<int>(value + 0.5f - (value < 0.f));
-}
+
+
+
+
+
+
+
+
 
 // Get a valid pixel from the image
 void getPixel(uint8_t* data, int width, int height, int lin, int col, uint8_t* pixelVal){
     // Clamp coords
-    clampPixel(lin, 0, height - 1);
-    clampPixel(col, 0, width - 1);
+    clamp<int>(lin, 0, height - 1);
+    clamp<int>(col, 0, width - 1);
 
     // Assigns correct value to return
     *pixelVal = data[lin * width + col];
@@ -143,37 +171,31 @@ void getPixel(uint8_t* data, int width, int height, int lin, int col, uint8_t* p
 
 // Get the bicubic coefficients
 float getBicubicCoef(float x){
-    float a = -0.6f;
+    /*float a = -0.6f;
     float xRounded = abs(x);
     if(xRounded <= 1.0f){
-        return (a + 2.0f) * xRounded * xRounded * xRounded - (a + 3.0f) * xRounded * xRounded + 1.0f;
+    return (a + 2.0f) * xRounded * xRounded * xRounded - (a + 3.0f) * xRounded * xRounded + 1.0f;
     } else if(xRounded < 2.0f){
-        return a * xRounded * xRounded * xRounded - 5.0f * a * xRounded * xRounded + 8.0f * a * xRounded - 4.0f * a;
+    return a * xRounded * xRounded * xRounded - 5.0f * a * xRounded * xRounded + 8.0f * a * xRounded - 4.0f * a;
+    } else{
+    return 0.0f;
+    }*/
+
+    float b = 0.f;
+    float c = 0.6f;
+    float xr = abs(x);
+    float xr2 = xr * xr;
+    float xr3 = xr2 * xr;
+
+    if(xr <= 1.0f){
+        return (1.f / 6.f) * ((12.f - 9.f * b - 6.f * c) * xr3 + (-18.f + 12.f * b + 6.f * c) * xr2 + (6.f - 2.f * b));
+    } else if(xr < 2.0f){
+        return (1.f / 6.f) * ((-b * -6.f*c) * xr3 + (6.f*b + 30.f*c) * xr2 + (-12.f*b - 48.f*c) * xr2 + (8.f*b + 24.f*c));
     } else{
         return 0.0f;
     }
 }
 
-// Return the temporary scale pixel format
-AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat) {
-	// Retrieve the temporary scale format
-	switch (inFormat){
-	case AV_PIX_FMT_YUV444P:
-		return AV_PIX_FMT_YUV444P;
-	case AV_PIX_FMT_YUV422P:
-		return AV_PIX_FMT_YUV422P;
-	case AV_PIX_FMT_YUV420P:
-		return AV_PIX_FMT_YUV420P;
-	case AV_PIX_FMT_RGB24:
-		return AV_PIX_FMT_YUV444P;
-	case AV_PIX_FMT_UYVY422:
-		return AV_PIX_FMT_YUV422P;
-	case AV_PIX_FMT_NV12:
-		return AV_PIX_FMT_YUV420P;
-	default:
-		break;
-	}
+float getBilinearCoef(float x){
 
-	// If the source pixel format is not supported
-	return AV_PIX_FMT_NONE;
 }
