@@ -1,8 +1,8 @@
 #include "Common.h"
 
 // Limit a value to a defined interval
-template <class DataType>
-void clamp(DataType &val, DataType min, DataType max){
+template <class PrecisionType>
+void clamp(PrecisionType &val, PrecisionType min, PrecisionType max){
     if(val < min)
         val = min;
     else if(val > max)
@@ -10,20 +10,9 @@ void clamp(DataType &val, DataType min, DataType max){
 }
 
 // Convert a floating point value to fixed point
-template <class DataType, class PrecisionType>
-DataType roundTo(PrecisionType value){
-    return static_cast<DataType>(value + static_cast<PrecisionType>(0.5) - (value < static_cast<PrecisionType>(0.)));
-}
-
-// Get a valid pixel from the image
-template <class DataType>
-void getPixel(int lin, int col, int height, int width, DataType* data, DataType* pixelVal){
-    // Clamp coords
-    clamp<int>(lin, 0, height - 1);
-    clamp<int>(col, 0, width - 1);
-
-    // Assigns correct value to return
-    *pixelVal = data[lin * width + col];
+template <class PrecisionType>
+uint8_t roundTo(PrecisionType value){
+    return static_cast<uint8_t>(value + static_cast<PrecisionType>(0.5) - (value < static_cast<PrecisionType>(0.)));
 }
 
 // Calculate nearest neighbor interpolation coefficient from a distance
@@ -48,6 +37,33 @@ PrecisionType BilinearCoefficient(PrecisionType val){
     // Calculate coefficient
     if(valAbs < static_cast<PrecisionType>(1.))
         return static_cast<PrecisionType>(1.) - valAbs;
+    else
+        return static_cast<PrecisionType>(0.);
+}
+
+// Calculate bicubic interpolation coefficient from a distance
+template <class PrecisionType>
+PrecisionType BicubicCoefficient(PrecisionType val){
+    // Calculate absolute value to zero
+    PrecisionType valAbs = abs(val);
+
+    // Configurable parameters
+    PrecisionType A = static_cast<PrecisionType>(-0.6);
+
+    // Calculate once
+    PrecisionType valAbs2 = valAbs * valAbs;
+    PrecisionType valAbs3 = valAbs2 * valAbs;
+
+    // Calculate coefficient
+    if(valAbs < static_cast<PrecisionType>(1.))
+        return (A + static_cast<PrecisionType>(2.)) * valAbs3 -
+        (A + static_cast<PrecisionType>(3.)) * valAbs2 +
+        static_cast<PrecisionType>(1.);
+    else if(valAbs < static_cast<PrecisionType>(2.))
+        return A * valAbs3 -
+        static_cast<PrecisionType>(5.) * A * valAbs2 +
+        static_cast<PrecisionType>(8.) * A * valAbs -
+        static_cast<PrecisionType>(4.) * A;
     else
         return static_cast<PrecisionType>(0.);
 }
