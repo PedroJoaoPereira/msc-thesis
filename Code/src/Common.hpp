@@ -1,5 +1,24 @@
 #include "Common.h"
 
+// Return coefficient function calculator
+template <class PrecisionType>
+PrecisionType(*getCoefMethod(int operation))(PrecisionType){
+    // Resize operation with different kernels
+    switch(operation){
+        case SWS_POINT:
+            return &NearestNeighborCoefficient<PrecisionType>;
+        case SWS_BILINEAR:
+            return &BilinearCoefficient<PrecisionType>;
+        case SWS_BICUBIC:
+            return &MitchellCoefficient<PrecisionType>;
+        case SWS_LANCZOS:
+            return nullptr;
+    }
+
+    // Insuccess
+    return nullptr;
+}
+
 // Limit a value to a defined interval
 template <class PrecisionType>
 void clamp(PrecisionType &val, PrecisionType min, PrecisionType max){

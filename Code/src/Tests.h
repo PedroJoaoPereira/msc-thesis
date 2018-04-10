@@ -5,12 +5,12 @@
 #include <vector>
 
 #include "FFMPEG_Scale.h"
-#include "FFMPEG_Sim_Scale.h"
+#include "Simulator_Scale.h"
 
 using namespace std;
 
 // Facilitate writing operations
-string formatToString(int format);
+string pixelFormatToString(int format);
 string operationToString(int operation);
 
 // Test ffmpeg procedure
