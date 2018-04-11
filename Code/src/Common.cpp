@@ -21,11 +21,7 @@ bool isSupportedFormat(AVPixelFormat format){
     switch(format){
         case AV_PIX_FMT_YUV444P:
         case AV_PIX_FMT_GBRP:
-        case AV_PIX_FMT_RGB24:
         case AV_PIX_FMT_YUV422P:
-        case AV_PIX_FMT_YUV420P:
-        case AV_PIX_FMT_UYVY422:
-        case AV_PIX_FMT_NV12:
             return true;
     }
 
