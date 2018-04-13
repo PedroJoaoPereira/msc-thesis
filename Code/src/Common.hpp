@@ -12,7 +12,7 @@ PrecisionType(*getCoefMethod(int operation))(PrecisionType){
         case SWS_BICUBIC:
             return &MitchellCoefficient<PrecisionType>;
         case SWS_LANCZOS:
-            return nullptr;
+            return &LanczosCoefficient<PrecisionType>;
     }
 
     // Insuccess
@@ -115,5 +115,25 @@ PrecisionType MitchellCoefficient(PrecisionType val){
          (-static_cast<PrecisionType>(12.) * B - static_cast<PrecisionType>(48.) * C) * valAbs +
          (static_cast<PrecisionType>(8.) * B + static_cast<PrecisionType>(24.) * C));
     else
+        return static_cast<PrecisionType>(0.);
+}
+
+// Calculate Lanczos interpolation coefficient from a distance
+template <class PrecisionType>
+PrecisionType LanczosCoefficient(PrecisionType val){
+    // Calculate absolute value to zero
+    PrecisionType valAbs = abs(val);
+
+    // Configurable parameters
+    PrecisionType A = static_cast<PrecisionType>(3.);
+
+    // Calculate coefficient
+    if(valAbs < A){
+        // Calculate once
+        PrecisionType xpi = val * M_PI;
+        PrecisionType xapi = val / A * M_PI;
+
+        return sin(val * M_PI) * sin(val * M_PI / A) / (val * val * M_PI * M_PI / A);
+    } else
         return static_cast<PrecisionType>(0.);
 }
