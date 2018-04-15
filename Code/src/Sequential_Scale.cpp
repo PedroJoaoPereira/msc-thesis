@@ -446,18 +446,25 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 // Precalculate coefficients
 template <class PrecisionType>
 int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs) {
+    // Calculate size ratio
+    PrecisionType sizeRatio = static_cast<PrecisionType>(dstSize) / static_cast<PrecisionType>(srcSize);
+
+    // Check if is downscale or upscale
+    bool isDownScale = sizeRatio < static_cast<PrecisionType>(1.);
+    int pixelSupportDiv2 = pixelSupport / 2;
+    PrecisionType filterStep = static_cast<PrecisionType>(1.);
+    if(isDownScale && operation != SWS_POINT){
+        filterStep = 1. / (ceil((pixelSupport / 2.) / sizeRatio) / (pixelSupport / 2.));
+    }
+    
     // Calculate number of lines of coefficients
-    int preCalcCoefSize = lcm(srcSize, dstSize) / min(srcSize, dstSize);
+    int preCalcCoefSize = lcm(srcSize, dstSize) / min<int>(srcSize, dstSize);
 
     // Initialize 2d array
     preCalculatedCoefs = static_cast<PrecisionType**>(malloc(preCalcCoefSize * sizeof(PrecisionType*)));
-    for (int index = 0; index < preCalcCoefSize; index++)
+    for(int index = 0; index < preCalcCoefSize; index++)
         preCalculatedCoefs[index] = static_cast<PrecisionType*>(malloc(pixelSupport * sizeof(PrecisionType)));
 
-    // Calculate size ratio
-    PrecisionType sizeRatio = static_cast<PrecisionType>(dstSize) / static_cast<PrecisionType>(srcSize);
-    // Calculate once
-    int pixelSupportDiv2 = pixelSupport / 2;
     // For each necessary line of coefficients
     for (int lin = 0; lin < preCalcCoefSize; lin++) {
         // Original line index coordinate
@@ -473,11 +480,12 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
 
         // Calculate coefficients
         for (int index = 0; index < pixelSupportDiv2; index++) {
-            preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = coefFunc(upperCoef + index * sizeRatio);
-            preCalculatedCoefs[lin][index + pixelSupportDiv2] = coefFunc(bottomtCoef + index * sizeRatio);
+            preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = coefFunc((upperCoef + index) * filterStep);
+            preCalculatedCoefs[lin][index + pixelSupportDiv2] = coefFunc((bottomtCoef + index) * filterStep);
 
-            if(sizeRatio < 1 && operation == SWS_POINT)
-                preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = static_cast<PrecisionType>(preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] == preCalculatedCoefs[lin][index + pixelSupportDiv2]);
+            if(sizeRatio < static_cast<PrecisionType>(1.) && operation == SWS_POINT)
+                if(preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] == preCalculatedCoefs[lin][index + pixelSupportDiv2])
+                    preCalculatedCoefs[lin][index + pixelSupportDiv2] = static_cast<PrecisionType>(1.);
         }
     }
 
@@ -531,6 +539,7 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
             for (int linTemp = linStart; linTemp <= linStop; linTemp++) {
                 // Access once the memory
                 PrecisionType vCoef = vCoefs[lin % vCoefsSize][linTemp - linStart];
+
                 for (int colTemp = colStart; colTemp <= colStop; colTemp++) {
                     // Access once the memory
                     PrecisionType hCoef = hCoefs[col % hCoefsSize][colTemp - colStart];
@@ -624,7 +633,7 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
 
         // Temporary variables for precalculation of coefficients
         PrecisionType(*coefFunc)(PrecisionType) = getCoefMethod<PrecisionType>(operation);
-        int pixelSupport = getPixelSupport(operation);
+        int pixelSupport = getPixelSupport(operation, (srcWidth > dstWidth) && (srcHeight > dstHeight));
 
         // Create variables for precalculated coefficients
         PrecisionType** vCoefs;

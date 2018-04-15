@@ -1,5 +1,11 @@
 #include "Common.h"
 
+// Return minimum number of two values
+template <class PrecisionType>
+PrecisionType min(PrecisionType num1, PrecisionType num2){
+    return (num1 > num2) ? num2 : num1;
+}
+
 // Return coefficient function calculator
 template <class PrecisionType>
 PrecisionType(*getCoefMethod(int operation))(PrecisionType){
@@ -60,33 +66,6 @@ PrecisionType BilinearCoefficient(PrecisionType val){
         return static_cast<PrecisionType>(0.);
 }
 
-// Calculate bicubic interpolation coefficient from a distance
-template <class PrecisionType>
-PrecisionType BicubicCoefficient(PrecisionType val){
-    // Calculate absolute value to zero
-    PrecisionType valAbs = abs(val);
-
-    // Configurable parameters
-    PrecisionType A = static_cast<PrecisionType>(-0.6);
-
-    // Calculate once
-    PrecisionType valAbs2 = valAbs * valAbs;
-    PrecisionType valAbs3 = valAbs2 * valAbs;
-
-    // Calculate coefficient
-    if(valAbs < static_cast<PrecisionType>(1.))
-        return (A + static_cast<PrecisionType>(2.)) * valAbs3 -
-        (A + static_cast<PrecisionType>(3.)) * valAbs2 +
-        static_cast<PrecisionType>(1.);
-    else if(valAbs < static_cast<PrecisionType>(2.))
-        return A * valAbs3 -
-        static_cast<PrecisionType>(5.) * A * valAbs2 +
-        static_cast<PrecisionType>(8.) * A * valAbs -
-        static_cast<PrecisionType>(4.) * A;
-    else
-        return static_cast<PrecisionType>(0.);
-}
-
 // Calculate Mitchell interpolation coefficient from a distance
 template <class PrecisionType>
 PrecisionType MitchellCoefficient(PrecisionType val){
@@ -95,7 +74,7 @@ PrecisionType MitchellCoefficient(PrecisionType val){
 
     // Configurable parameters
     PrecisionType B = static_cast<PrecisionType>(0.);
-    PrecisionType C = static_cast<PrecisionType>(0.6);
+    PrecisionType C = static_cast<PrecisionType>(.6);
 
     // Calculate once
     PrecisionType valAbs2 = valAbs * valAbs;
