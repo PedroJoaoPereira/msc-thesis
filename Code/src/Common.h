@@ -12,13 +12,17 @@ extern "C"{
 
 using namespace std;
 
+// Define some pixel formats
+#define AV_PIX_FMT_V210 -2
+#define AV_PIX_FMT_YUV422PNORM -3
+
 // int operation    - resizing operation
 // Return if operation is supported
 bool isSupportedOperation(int operation);
 
-// AVPixelFormat format	- pixel format of the data
+// int format   - pixel format of the data
 // Return if format is supported
-bool isSupportedFormat(AVPixelFormat format);
+bool isSupportedFormat(int format);
 
 // int num1 - integer value
 // int num2 - integer value
@@ -30,9 +34,9 @@ int lcm(int num1, int num2);
 // Return the value of the pixel support depending of the operation
 int getPixelSupport(int operation, int scaleRatio);
 
-// AVPixelFormat inFormat	- pixel format of the source data
+// int inFormat	- pixel format of the source data
 // Return the temporary scale pixel format
-AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat);
+int getTempScaleFormat(int inFormat);
 
 // string fileName          - path of the image file
 // uint8_t** dataBuffer    - buffer that will contain the data
@@ -44,20 +48,20 @@ int readImageFromFile(string fileName, uint8_t** dataBuffer);
 // Write image to a file
 int writeImageToFile(string fileName, AVFrame** frame);
 
-// int width                    - width of the image
-// int height                   - height of the image
-// AVPixelFormat pixelFormat    - pixel format of the image
-// uint8_t** dataBuffer         - buffer that will contain the data
+// int width            - width of the image
+// int height           - height of the image
+// int pixelFormat      - pixel format of the image
+// uint8_t** dataBuffer - buffer that will contain the data
 // Create data buffer to hold image
-int createImageDataBuffer(int width, int height, AVPixelFormat pixelFormat, uint8_t** dataBuffer);
+int createImageDataBuffer(int width, int height, int pixelFormat, uint8_t** dataBuffer);
 
-// uint8_t** dataBuffer         - image data to transfer to the AVFrame
-// int width                    - width of the image
-// int height                   - height of the image
-// AVPixelFormat pixelFormat    - pixel format of the image
-// AVFrame* frame               - resulting AVframe properly initialized
+// uint8_t** dataBuffer - image data to transfer to the AVFrame
+// int width            - width of the image
+// int height           - height of the image
+// int pixelFormat      - pixel format of the image
+// AVFrame* frame       - resulting AVframe properly initialized
 // Initialize and transfer data to AVFrame
-int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat pixelFormat, AVFrame** frame);
+int initializeAVFrame(uint8_t** dataBuffer, int width, int height, int pixelFormat, AVFrame** frame);
 
 // int lin              - line coordinate of pixel to retrieve
 // int col              - column coordinate of pixel to retrieve
