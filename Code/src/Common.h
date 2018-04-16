@@ -26,9 +26,9 @@ bool isSupportedFormat(AVPixelFormat format);
 int lcm(int num1, int num2);
 
 // int operation    - value to be clamped
-// bool isDownScale - boolean if operation is a down scale
+// int scaleRatio   - the nearest integer value of the scaling ratio
 // Return the value of the pixel support depending of the operation
-int getPixelSupport(int operation, bool isDownScale);
+int getPixelSupport(int operation, int scaleRatio);
 
 // AVPixelFormat inFormat	- pixel format of the source data
 // Return the temporary scale pixel format
@@ -71,9 +71,15 @@ uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data);
 
 // PrecisionType num1   - first value
 // PrecisionType num2   - second value
-// Return minimum number of two values
+// Return the minimum number of two values
 template <class PrecisionType>
 PrecisionType min(PrecisionType num1, PrecisionType num2);
+
+// PrecisionType num1   - first value
+// PrecisionType num2   - second value
+// Return the maximum number of two values
+template <class PrecisionType>
+PrecisionType max(PrecisionType num1, PrecisionType num2);
 
 // int operation    - value to be clamped
 // Return coefficient function calculator
@@ -101,11 +107,6 @@ PrecisionType NearestNeighborCoefficient(PrecisionType val);
 // Calculate bilinear interpolation coefficient from a distance
 template <class PrecisionType>
 PrecisionType BilinearCoefficient(PrecisionType val);
-
-// PrecisionType val    - distance value to calculate coefficient from
-// Calculate bicubic interpolation coefficient from a distance
-template <class PrecisionType>
-PrecisionType BicubicCoefficient(PrecisionType val);
 
 // PrecisionType val    - distance value to calculate coefficient from
 // Calculate Mitchell interpolation coefficient from a distance
