@@ -25,6 +25,7 @@ bool isSupportedFormat(int format){
         case AV_PIX_FMT_YUV420P:
         case AV_PIX_FMT_NV12:
         case AV_PIX_FMT_V210:
+        case AV_PIX_FMT_YUV422PNORM:
             return true;
     }
 
@@ -82,6 +83,8 @@ int getTempScaleFormat(int inFormat){
             return AV_PIX_FMT_YUV422P;
         case AV_PIX_FMT_NV12:
             return AV_PIX_FMT_YUV420P;
+        case AV_PIX_FMT_V210:
+            return AV_PIX_FMT_YUV422P;
     }
 
     // If the source pixel format is not supported
@@ -127,6 +130,11 @@ int readImageFromFile(string fileName, uint8_t** dataBuffer){
 
 // Write image to a file
 int writeImageToFile(string fileName, AVFrame** frame){
+    // Change pixel format if it is fundamentally the same
+    int pixelFormat = (*frame)->format;
+    if (pixelFormat == AV_PIX_FMT_YUV422PNORM)
+        pixelFormat = AV_PIX_FMT_YUV422P;
+
     // Opens output file
     FILE* outputFile = fopen(fileName.c_str(), "wb");
     if(!outputFile){
@@ -134,14 +142,14 @@ int writeImageToFile(string fileName, AVFrame** frame){
         return -1;
     }
 
-    if((*frame)->format == AV_PIX_FMT_V210){
+    if(pixelFormat == AV_PIX_FMT_V210){
         // Calculate the number of elements of the image
         int numElements = (*frame)->width * (*frame)->height / 6 * 4;
         // Write resulting frame to a file
         fwrite((*frame)->data[0], sizeof(uint32_t), numElements, outputFile);
     } else{
         // Calculate the number of elements of the image
-        int numElements = avpicture_get_size((AVPixelFormat) (*frame)->format, (*frame)->width, (*frame)->height);
+        int numElements = avpicture_get_size((AVPixelFormat) pixelFormat, (*frame)->width, (*frame)->height);
         // Write resulting frame to a file
         fwrite((*frame)->data[0], sizeof(uint8_t), numElements, outputFile);
     }
@@ -155,11 +163,13 @@ int writeImageToFile(string fileName, AVFrame** frame){
 
 // Create data buffer to hold image
 int createImageDataBuffer(int width, int height, int pixelFormat, uint8_t** dataBuffer){
+    // Change pixel format if it is fundamentally the same
+    if (pixelFormat == AV_PIX_FMT_YUV422PNORM)
+        pixelFormat = AV_PIX_FMT_YUV422P;
+
     // Calculate the number of elements of the image
     int numElements;
-    if (pixelFormat == AV_PIX_FMT_V210)
-        numElements = avpicture_get_size(AV_PIX_FMT_UYVY422, width, height);
-    else
+    if (pixelFormat != AV_PIX_FMT_V210)
         numElements = avpicture_get_size((AVPixelFormat) pixelFormat, width, height);
 
     // Allocate buffer of the frame
@@ -189,6 +199,10 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, int pixelForm
     (*frame)->width = width;
     (*frame)->height = height;
     (*frame)->format = pixelFormat;
+
+    // Change pixel format if it is fundamentally the same
+    if (pixelFormat == AV_PIX_FMT_YUV422PNORM)
+        pixelFormat = AV_PIX_FMT_YUV422P;
 
     // Fill frame->data and frame->linesize pointers
     if(pixelFormat == AV_PIX_FMT_V210){

@@ -242,8 +242,8 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
                 PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
                 PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
 
-                *dstBufferChromaU++ = roundTo<PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
-                *dstBufferChromaV++ = roundTo<PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
+                *dstBufferChromaU++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
+                *dstBufferChromaV++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
             }
 
             srcBufferChromaU += strideDiv2;
@@ -283,8 +283,8 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
                 PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
                 PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
 
-                *dstBufferChroma++ = roundTo<PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
-                *dstBufferChroma++ = roundTo<PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
+                *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
+                *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
             }
 
             srcBufferChromaU += strideDiv2;
@@ -445,6 +445,126 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
         return 0;
     }
 
+    if (srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422PNORM) {
+        // Number of elements
+        long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
+
+        // Buffer pointers
+        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]);
+        auto dstBuffer = dstSlice[0];
+        auto dstBufferChromaU = dstSlice[1];
+        auto dstBufferChromaV = dstSlice[2];
+
+        // Calculate once
+        PrecisionType valueConstLuma = static_cast<PrecisionType>(219.) / static_cast<PrecisionType>(1023.);
+        PrecisionType valueConstChroma = static_cast<PrecisionType>(224.) / static_cast<PrecisionType>(1023.);
+        PrecisionType value16 = static_cast<PrecisionType>(16.);
+
+        // Assign once
+        enum { SHIFT_RIGHT = 20U, SHIFT_MIDDLE = 10U, X3FF = 0x3FF, };
+
+        // Loop through each pixel
+        for (int index = 0; index < numElements; index++) {
+            auto u0 = *srcBuffer & X3FF; // U0
+            auto y0 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // Y0
+            auto v0 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // V0
+            *srcBuffer++;
+
+            auto y1 = *srcBuffer & X3FF; // Y1
+            auto u1 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // U1
+            auto y2 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // Y2
+            *srcBuffer++;
+
+            auto v1 = *srcBuffer & X3FF; // V1
+            auto y3 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // Y3
+            auto u2 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // U2
+            *srcBuffer++;
+
+            auto y4 = *srcBuffer & X3FF; // Y4
+            auto v2 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // V2
+            auto y5 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // Y5
+            *srcBuffer++;
+
+            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u0) * valueConstChroma + value16);
+            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y0) * valueConstLuma + value16);
+            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v0) * valueConstChroma + value16);
+            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y1) * valueConstLuma + value16);
+
+            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u1) * valueConstChroma + value16);
+            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y2) * valueConstLuma + value16);
+            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v1) * valueConstChroma + value16);
+            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y3) * valueConstLuma + value16);
+
+            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u2) * valueConstChroma + value16);
+            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y4) * valueConstLuma + value16);
+            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v2) * valueConstChroma + value16);
+            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y5) * valueConstLuma + value16);
+        }
+
+        // Success
+        return 0;
+    }
+
+    if (srcPixelFormat == AV_PIX_FMT_YUV422PNORM && dstPixelFormat == AV_PIX_FMT_V210) {
+        // Number of elements
+        long numElements = srcStride[0] * srcHeight / 6;
+
+        // Buffer pointers
+        auto srcBuffer = srcSlice[0];
+        auto srcBufferChromaU = srcSlice[1];
+        auto srcBufferChromaV = srcSlice[2];
+        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]);
+
+        // Calculate once
+        PrecisionType value16 = static_cast<PrecisionType>(16.);
+        PrecisionType valueConstLuma = static_cast<PrecisionType>(1023.) / static_cast<PrecisionType>(219.);
+        PrecisionType valueConstChroma = static_cast<PrecisionType>(1023.) / static_cast<PrecisionType>(224.);
+
+        // Assign once
+        enum { SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, X3FF = 0x3FF, };
+
+        // Loop through each pixel
+        for (int index = 0; index < numElements; index++) {
+            auto u0bpp8 = *srcBufferChromaU++; // U0
+            auto y0bpp8 = *srcBuffer++; // Y0
+            auto v0bpp8 = *srcBufferChromaV++; // V0
+            auto y1bpp8 = *srcBuffer++; // Y1
+
+            auto u1bpp8 = *srcBufferChromaU++; // U1
+            auto y2bpp8 = *srcBuffer++; // Y2
+            auto v1bpp8 = *srcBufferChromaV++; // V1
+            auto y3bpp8 = *srcBuffer++; // Y3
+
+            auto u2bpp8 = *srcBufferChromaU++; // U2
+            auto y4bpp8 = *srcBuffer++; // Y4
+            auto v2bpp8 = *srcBufferChromaV++; // V2
+            auto y5bpp8 = *srcBuffer++; // Y5
+
+            auto v0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v0bpp8) - value16) * valueConstChroma) & X3FF;
+            auto y0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y0bpp8) - value16) * valueConstLuma) & X3FF;
+            auto u0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u0bpp8) - value16) * valueConstChroma) & X3FF;
+            auto y2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y2bpp8) - value16) * valueConstLuma) & X3FF;
+
+            auto u1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u1bpp8) - value16) * valueConstChroma) & X3FF;
+            auto y1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y1bpp8) - value16) * valueConstLuma) & X3FF;
+            auto u2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u2bpp8) - value16) * valueConstChroma) & X3FF;
+            auto y3 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y3bpp8) - value16) * valueConstLuma) & X3FF;
+
+            auto v1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v1bpp8) - value16) * valueConstChroma) & X3FF;
+            auto y5 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y5bpp8) - value16) * valueConstLuma) & X3FF;
+            auto v2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v2bpp8) - value16) * valueConstChroma) & X3FF;
+            auto y4 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y4bpp8) - value16) * valueConstLuma) & X3FF;
+
+            *dstBuffer++ = (v0 << SHIFT_LEFT) | (y0 << SHIFT_MIDDLE) | u0;
+            *dstBuffer++ = (y2 << SHIFT_LEFT) | (u1 << SHIFT_MIDDLE) | y1;
+            *dstBuffer++ = (u2 << SHIFT_LEFT) | (y3 << SHIFT_MIDDLE) | v1;
+            *dstBuffer++ = (y5 << SHIFT_LEFT) | (v2 << SHIFT_MIDDLE) | y4;
+        }
+
+        // Success
+        return 0;
+    }
+
     // No conversion was supported
     return -1;
 }
@@ -503,7 +623,7 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
 template <class PrecisionType>
 void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
     int dstWidth, int dstHeight, uint8_t* dstData, int operation,
-    int pixelSupport, int vCoefsSize, PrecisionType** vCoefs, int hCoefsSize, PrecisionType** hCoefs) {
+    int pixelSupport, int vCoefsSize, PrecisionType** vCoefs, int hCoefsSize, PrecisionType** hCoefs, int colorChannel) {
 
     // Get scale ratios
     PrecisionType scaleHeightRatio = static_cast<PrecisionType>(dstHeight) / static_cast<PrecisionType>(srcHeight);
@@ -565,9 +685,12 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
             // Calculate resulting color
             PrecisionType result = colorAcc / weightAcc;
             // Clamp value to avoid undershooting and overshooting
-            clamp<PrecisionType>(result, static_cast<PrecisionType>(0.), static_cast<PrecisionType>(255.));
+            if (colorChannel == 0)
+                clamp<PrecisionType>(result, static_cast<PrecisionType>(16.), static_cast<PrecisionType>(235.));
+            else
+                clamp<PrecisionType>(result, static_cast<PrecisionType>(16.), static_cast<PrecisionType>(240.));
             // Assign calculated color to destiantion data
-            dstData[targetLine + col] = roundTo<PrecisionType>(result);
+            dstData[targetLine + col] = roundTo<uint8_t, PrecisionType>(result);
         }
     }
 }
@@ -588,7 +711,11 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         isOnlyResample = true;
 
     // Initialize needed variables if it is a scaling operation
-    int scalingSupportedFormat = getTempScaleFormat(srcFormat);
+    int scalingSupportedFormat;
+    if (srcFormat == AV_PIX_FMT_V210 && dstFormat == AV_PIX_FMT_V210)
+        scalingSupportedFormat = AV_PIX_FMT_YUV422PNORM;
+    else
+        scalingSupportedFormat = getTempScaleFormat(srcFormat);
 
 #pragma region INITIALIZE TEMPORARY FRAMES
     // Temporary frames used in intermediate operations
@@ -652,7 +779,7 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         // Calculate the chroma size depending on the source data pixel format
         float tempWidthRatio = 1.f;
         float tempHeightRatio = 1.f;
-        if (scalingSupportedFormat == AV_PIX_FMT_YUV422P || scalingSupportedFormat == AV_PIX_FMT_YUV420P)
+        if (scalingSupportedFormat == AV_PIX_FMT_YUV422P || scalingSupportedFormat == AV_PIX_FMT_YUV420P || scalingSupportedFormat == AV_PIX_FMT_YUV422PNORM)
             tempWidthRatio = 0.5f;
         if (scalingSupportedFormat == AV_PIX_FMT_YUV420P)
             tempHeightRatio = 0.5f;
@@ -660,13 +787,13 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         // Apply the resizing operation to luma channel
         sequential_resize<PrecisionType>(srcWidth, srcHeight, resampleFrame->data[0],
             dstWidth, dstHeight, scaleFrame->data[0], operation,
-            pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs);
+            pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, 0);
 
         // Apply the resizing operation to chroma channels
         for (int colorChannel = 1; colorChannel < 3; colorChannel++) {
             sequential_resize<PrecisionType>(static_cast<int>(srcWidth * tempWidthRatio), static_cast<int>(srcHeight * tempHeightRatio), resampleFrame->data[colorChannel],
                 static_cast<int>(dstWidth * tempWidthRatio), static_cast<int>(dstHeight * tempHeightRatio), scaleFrame->data[colorChannel], operation,
-                pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs);
+                pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, colorChannel);
         }
 
         // Free used resources
@@ -692,8 +819,7 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         if (!isOnlyResample) {
             av_frame_free(&scaleFrame);
             free(scaleBuffer);
-        }
-        
+        }        
         return -2;
     }
 #pragma endregion
@@ -713,6 +839,13 @@ int sequential_scale(AVFrame* src, AVFrame* dst, int operation) {
     // Variables used
     int retVal = -1, duration = -1;
     high_resolution_clock::time_point initTime, stopTime;
+
+    // Verify valid frames
+    if (src == nullptr || dst == nullptr) {
+        cerr << "[SEQUENTIAL] One or both input frames are null!" << endl;
+        return -1;
+    }
+
     AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
     AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
 
@@ -735,6 +868,11 @@ int sequential_scale(AVFrame* src, AVFrame* dst, int operation) {
     // Verify if supported pixel formats
     if (!isSupportedFormat(srcFormat) || !isSupportedFormat(dstFormat)) {
         cerr << "[SEQUENTIAL] Frame pixel format is not supported!" << endl;
+        return -1;
+    }
+    // Verify if can convert a 10 bit format
+    if ((src->width % 12 != 0 && srcFormat == AV_PIX_FMT_V210) || (dst->width % 12 != 0 && dstFormat == AV_PIX_FMT_V210)) {
+        cerr << "[SEQUENTIAL] Can not handle 10 bit format because data is not aligned!" << endl;
         return -1;
     }
     // Verify if supported scaling operation

@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "FFMPEG_Scale.h"
-#include "Simulator_Scale.h"
 #include "Sequential_Scale.h"
 
 using namespace std;
@@ -19,17 +18,12 @@ int testFFMPEGSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
 int testFFMPEGAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
 void testFFMPEG(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
 
-// Test simulator procedure
-int testSimulatorSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
-int testSimulatorAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
-void testSimulator(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
-
 // Test sequential procedure
 int testSequentialSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
 int testSequentialAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
 void testSequential(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
 
 // Test all procedures
-void testAll(bool isTestFFMPEG, bool isTestSimulator, bool isTestSequential, bool isTestOpenMP, vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
 
 #endif

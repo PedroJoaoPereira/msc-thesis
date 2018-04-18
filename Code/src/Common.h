@@ -99,8 +99,8 @@ void clamp(PrecisionType &val, PrecisionType min, PrecisionType max);
 
 // PrecisionType value  - value to be converted
 // Convert a floating point value to fixed point
-template <class PrecisionType>
-uint8_t roundTo(PrecisionType value);
+template <class DataType, class PrecisionType>
+DataType roundTo(PrecisionType value);
 
 // PrecisionType val    - distance value to calculate coefficient from
 // Calculate nearest neighbor interpolation coefficient from a distance
