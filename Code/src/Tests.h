@@ -7,6 +7,7 @@
 #include "FFMPEG_Scale.h"
 #include "Sequential_Scale.h"
 #include "OMP_Scale.h"
+#include "CUDA_Scale.cuh"
 
 using namespace std;
 
@@ -29,7 +30,12 @@ int testOMPSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
 int testOMPAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
 void testOMP(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
 
+// Test cuda procedure
+int testCUDASingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
+int testCUDAAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
+void testCUDA(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+
 // Test all procedures
-void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, bool isTestCUDA, vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
 
 #endif
