@@ -102,7 +102,7 @@ void testFFMPEG(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<
         for(int indexOut = 0; indexOut < outImgs.size(); indexOut++){
             // For each input image
             for(int indexIn = 0; indexIn < inImgs.size(); indexIn++){
-                if((*inImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_V210 || (*outImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_V210)
+                if ((*inImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_V210 || (*outImgs.at(indexOut)).pixelFormat == AV_PIX_FMT_V210)
                     continue;
 
                 if(testFFMPEGAverage((*inImgs.at(indexIn)), (*outImgs.at(indexOut)), operations.at(indexOp), nTimes) < 0)
