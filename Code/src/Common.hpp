@@ -53,7 +53,7 @@ PrecisionType NearestNeighborCoefficient(PrecisionType val){
     PrecisionType valAbs = abs(val);
 
     // Calculate coefficient
-    if(valAbs < static_cast<PrecisionType>(0.5))
+    if(valAbs <= static_cast<PrecisionType>(0.499999))
         return static_cast<PrecisionType>(1.);
     else
         return static_cast<PrecisionType>(0.);
