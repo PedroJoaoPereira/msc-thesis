@@ -20,6 +20,8 @@ string pixelFormatToString(int format){
             return "NV12";
         case AV_PIX_FMT_V210:
             return "V210";
+        case AV_PIX_FMT_YUV422PNORM:
+            return "YUV422P";
     }
 
     // Insuccess
@@ -44,12 +46,12 @@ string operationToString(int operation){
 }
 
 // Test ffmpeg procedure
-int testFFMPEGSingle(ImageInfo &inImg, ImageInfo &outImg, int operation){
+int testFFMPEGSingle(ImageClass &inImg, ImageClass &outImg, int operation){
     // Prepare output frame
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = ffmpeg_scale(inImg.frame, outImg.frame, operation);
+    int executionTime = ffmpeg_resample(inImg.frame, outImg.frame, operation);
     if(executionTime < 0){
         cout << "[FFMPEG] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
@@ -62,7 +64,7 @@ int testFFMPEGSingle(ImageInfo &inImg, ImageInfo &outImg, int operation){
     return executionTime;
 }
 
-int testFFMPEGAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes){
+int testFFMPEGAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes){
     // Temporary variable
     long long acc = 0;
     
@@ -95,7 +97,7 @@ int testFFMPEGAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTi
     return avgExecutionTime;
 }
 
-void testFFMPEG(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes){
+void testFFMPEG(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
     // For each operation
     for(int indexOp = 0; indexOp < operations.size(); indexOp++){
         // For each output image
@@ -113,12 +115,12 @@ void testFFMPEG(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<
 }
 
 // Test sequential procedure
-int testSequentialSingle(ImageInfo &inImg, ImageInfo &outImg, int operation){
+int testSequentialSingle(ImageClass &inImg, ImageClass &outImg, int operation){
     // Prepare output frame
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = sequential_scale(inImg.frame, outImg.frame, operation);
+    int executionTime = sequential_resample(inImg.frame, outImg.frame, operation);
     if (executionTime < 0) {
         cout << "[SEQUENTIAL] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
@@ -131,7 +133,7 @@ int testSequentialSingle(ImageInfo &inImg, ImageInfo &outImg, int operation){
     return executionTime;
 }
 
-int testSequentialAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes){
+int testSequentialAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes){
     // Temporary variable
     long long acc = 0;
 
@@ -164,7 +166,7 @@ int testSequentialAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int
     return avgExecutionTime;
 }
 
-void testSequential(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes){
+void testSequential(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
     // For each operation
     for (int indexOp = 0; indexOp < operations.size(); indexOp++) {
         // For each output image
@@ -178,13 +180,14 @@ void testSequential(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vec
     }
 }
 
+
 // Test openmp procedure
-int testOMPSingle(ImageInfo &inImg, ImageInfo &outImg, int operation) {
+int testOMPSingle(ImageClass &inImg, ImageClass &outImg, int operation) {
     // Prepare output frame
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = omp_scale(inImg.frame, outImg.frame, operation);
+    int executionTime = omp_resample(inImg.frame, outImg.frame, operation);
     if (executionTime < 0) {
         cout << "[OpenMP] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
@@ -197,7 +200,7 @@ int testOMPSingle(ImageInfo &inImg, ImageInfo &outImg, int operation) {
     return executionTime;
 }
 
-int testOMPAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes) {
+int testOMPAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes) {
     // Temporary variable
     long long acc = 0;
 
@@ -230,7 +233,7 @@ int testOMPAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes
     return avgExecutionTime;
 }
 
-void testOMP(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes) {
+void testOMP(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes) {
     // For each operation
     for (int indexOp = 0; indexOp < operations.size(); indexOp++) {
         // For each output image
@@ -244,8 +247,9 @@ void testOMP(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int
     }
 }
 
+/*
 // Test cuda procedure
-int testCUDASingle(ImageInfo &inImg, ImageInfo &outImg, int operation) {
+int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation) {
     // Prepare output frame
     outImg.initFrame();
 
@@ -263,7 +267,7 @@ int testCUDASingle(ImageInfo &inImg, ImageInfo &outImg, int operation) {
     return executionTime;
 }
 
-int testCUDAAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes) {
+int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes) {
     // Temporary variable
     long long acc = 0;
 
@@ -296,7 +300,7 @@ int testCUDAAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTime
     return avgExecutionTime;
 }
 
-void testCUDA(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes) {
+void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes) {
     // For each operation
     for (int indexOp = 0; indexOp < operations.size(); indexOp++) {
         // For each output image
@@ -309,15 +313,19 @@ void testCUDA(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<in
         }
     }
 }
+*/
 
 // Test all procedures
-void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, bool isTestCUDA, vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes){
+void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, bool isTestCUDA, vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
     if(isTestFFMPEG)
         testFFMPEG(inImgs, outImgs, operations, nTimes);
     if (isTestSequential)
         testSequential(inImgs, outImgs, operations, nTimes);
     if (isTestOpenMP)
         testOMP(inImgs, outImgs, operations, nTimes);
+
+    /*
     if (isTestCUDA)
         testCUDA(inImgs, outImgs, operations, nTimes);
+        */
 }

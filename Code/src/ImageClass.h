@@ -1,18 +1,19 @@
-#ifndef IMAGE_INFO_H
-#define IMAGE_INFO_H
+#ifndef IMAGE_CLASS_H
+#define IMAGE_CLASS_H
 
+#include <iostream>
 #include <string>
 
-#include "Common.h"
+#include "ImageUtils.h"
 
 extern "C"{
-#define __STDC_CONSTANT_MACROS
-#include <libavformat/avformat.h>
+    #define __STDC_CONSTANT_MACROS
+    #include <libavformat/avformat.h>
 }
 
 using namespace std;
 
-class ImageInfo{
+class ImageClass{
     public:
     // Variables
     string fileName;
@@ -23,7 +24,7 @@ class ImageInfo{
     AVFrame* frame;
 
     // Constructor
-    ImageInfo(string fileName, int width, int height, int pixelFormat);
+    ImageClass(string fileName, int width, int height, int pixelFormat);
 
     // Load image into avframe
     void loadImage();

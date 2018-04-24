@@ -4,10 +4,9 @@
 #include <string>
 #include <vector>
 
-#include "FFMPEG_Scale.h"
-#include "Sequential_Scale.h"
-#include "OMP_Scale.h"
-#include "CUDA_Scale.cuh"
+#include "FFMPEG_Resample.h"
+#include "Sequential_Resample.h"
+#include "OpenMP_Resample.h"
 
 using namespace std;
 
@@ -16,26 +15,29 @@ string pixelFormatToString(int format);
 string operationToString(int operation);
 
 // Test ffmpeg procedure
-int testFFMPEGSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
-int testFFMPEGAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
-void testFFMPEG(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+int testFFMPEGSingle(ImageClass &inImg, ImageClass &outImg, int operation);
+int testFFMPEGAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes);
+void testFFMPEG(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes);
 
 // Test sequential procedure
-int testSequentialSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
-int testSequentialAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
-void testSequential(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+int testSequentialSingle(ImageClass &inImg, ImageClass &outImg, int operation);
+int testSequentialAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes);
+void testSequential(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes);
+
 
 // Test openmp procedure
-int testOMPSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
-int testOMPAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
-void testOMP(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+int testOMPSingle(ImageClass &inImg, ImageClass &outImg, int operation);
+int testOMPAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes);
+void testOMP(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes);
 
+/*
 // Test cuda procedure
 int testCUDASingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
 int testCUDAAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
 void testCUDA(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+*/
 
 // Test all procedures
-void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, bool isTestCUDA, vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, bool isTestCUDA, vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes);
 
 #endif

@@ -1,26 +1,33 @@
-#include "Sequential_Scale.h"
+#include "Sequential_Resample.h"
 
-// Modify the color model of the image
+// Convert the pixel format of the image
 template <class PrecisionType>
-int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
-    int dstWidth, int dstHeight, int dstPixelFormat, uint8_t* dstSlice[], int dstStride[]){
+int sequential_formatConversion(int srcWidth, int srcHeight,
+    int srcPixelFormat, uint8_t* srcSlice[],
+    int dstPixelFormat, uint8_t* dstSlice[]){
 
     // If same formats no need to resample
     if(srcPixelFormat == dstPixelFormat){
-        // Calculate the chroma size depending on the source data pixel format
-        float tempHeightRatio = 1.f;
-        if(srcPixelFormat == AV_PIX_FMT_YUV420P || srcPixelFormat == AV_PIX_FMT_NV12)
-            tempHeightRatio = 0.5f;
-
         // Copy data between buffers
-        if(srcPixelFormat == AV_PIX_FMT_V210)
+        if(srcPixelFormat == AV_PIX_FMT_V210){
             memcpy(dstSlice[0], srcSlice[0], ((srcWidth + 47) / 48) * 128 * srcHeight);
-        else
-            memcpy(dstSlice[0], srcSlice[0], srcStride[0] * srcHeight);
+        } else if(srcPixelFormat == AV_PIX_FMT_UYVY422){
+            memcpy(dstSlice[0], srcSlice[0], srcWidth * 2 * srcHeight);
+        } else{
+            // Chroma size discovery
+            float widthPerc = 1.f;
+            float heightPerc = 1.f;
+            if(srcPixelFormat == AV_PIX_FMT_YUV422P ||
+                srcPixelFormat == AV_PIX_FMT_YUV420P ||
+                srcPixelFormat == AV_PIX_FMT_YUV422PNORM)
+                widthPerc = 0.5f;
+            if(srcPixelFormat == AV_PIX_FMT_YUV420P)
+                heightPerc = 0.5f;
 
-        memcpy(dstSlice[1], srcSlice[1], srcStride[1] * srcHeight * tempHeightRatio);
-        memcpy(dstSlice[2], srcSlice[2], srcStride[2] * srcHeight * tempHeightRatio);
-        memcpy(dstSlice[3], srcSlice[3], srcStride[3] * srcHeight * tempHeightRatio);
+            memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
+            memcpy(dstSlice[1], srcSlice[1], srcWidth * srcHeight * widthPerc * heightPerc);
+            memcpy(dstSlice[2], srcSlice[2], srcWidth * srcHeight * widthPerc * heightPerc);
+        }
 
         // Success
         return 0;
@@ -29,7 +36,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
     // REORGANIZE COMPONENTS -------------------------
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
         // Number of elements
-        long numElements = srcStride[0] * srcHeight / 4;
+        long numElements = srcWidth * srcHeight / 2;
 
         // Buffer pointers
         auto srcBuffer = srcSlice[0];
@@ -57,7 +64,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
         // Access once
-        int stride = srcStride[0];
+        int stride = srcWidth * 2;
 
         // Calculate once
         int heightDiv2 = srcHeight / 2;
@@ -107,7 +114,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
         // Access once
-        int stride = srcStride[0];
+        int stride = srcWidth * 2;
 
         // Calculate once
         int heightDiv2 = srcHeight / 2;
@@ -156,7 +163,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210){
         // Number of elements
-        long numElements = srcStride[0] * srcHeight / 12;
+        long numElements = srcWidth * srcHeight / 6;
 
         // Buffer pointers
         auto srcBuffer = srcSlice[0];
@@ -194,7 +201,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Number of elements
-        long numElements = srcStride[0] * srcHeight / 2;
+        long numElements = srcWidth * srcHeight / 2;
 
         // Buffer pointers
         auto srcBuffer = srcSlice[0];
@@ -216,7 +223,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P){
         // Access once
-        int stride = srcStride[0];
+        int stride = srcWidth;
 
         // Luma plane is the same
         memcpy(dstSlice[0], srcSlice[0], stride * srcHeight);
@@ -258,7 +265,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12){
         // Access once
-        int stride = srcStride[0];
+        int stride = srcWidth;
 
         // Luma plane is the same
         memcpy(dstSlice[0], srcSlice[0], stride * srcHeight);
@@ -299,7 +306,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210){
         // Number of elements
-        long numElements = srcStride[0] * srcHeight / 6;
+        long numElements = srcWidth * srcHeight / 6;
 
         // Buffer pointers
         auto srcBuffer = srcSlice[0];
@@ -507,7 +514,7 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422PNORM && dstPixelFormat == AV_PIX_FMT_V210){
         // Number of elements
-        long numElements = srcStride[0] * srcHeight / 6;
+        long numElements = srcWidth * srcHeight / 6;
 
         // Buffer pointers
         auto srcBuffer = srcSlice[0];
@@ -571,7 +578,9 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
 // Precalculate coefficients
 template <class PrecisionType>
-int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs){
+int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
+    int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs){
+
     // Calculate size ratio
     PrecisionType sizeRatio = static_cast<PrecisionType>(dstSize) / static_cast<PrecisionType>(srcSize);
 
@@ -608,8 +617,11 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
         PrecisionType startPosition = leftPixel + offset;
 
         // Calculate coefficients
+        PrecisionType coefAcc = static_cast<PrecisionType>(0.);
         for(int index = 0; index < numCoefficients; index++){
-            preCalculatedCoefs[col][index] = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
+            PrecisionType coefHolder = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
+            coefAcc += coefHolder;
+            preCalculatedCoefs[col][index] = coefHolder;
         }
 
         // Avoid lines of coefficients without valid values
@@ -624,17 +636,24 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
                     preCalculatedCoefs[col][numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
             }
         }
+
+        // Normalizes coefficients except on Nearest Neighbor interpolation
+        if(operation != SWS_POINT)
+            for(int index = 0; index < numCoefficients; index++)
+                preCalculatedCoefs[col][index] /= coefAcc;
     }
 
     // Success
     return preCalcCoefSize;
 }
 
-// Apply resizing operation
+// Change the image dimension
 template <class PrecisionType>
 void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
-    int dstWidth, int dstHeight, uint8_t* dstData, int operation,
-    int pixelSupport, int vCoefsSize, PrecisionType** vCoefs, int hCoefsSize, PrecisionType** hCoefs, int colorChannel){
+    int dstWidth, int dstHeight, uint8_t* dstData,
+    int operation, int pixelSupport,
+    int vCoefsSize, PrecisionType** vCoefs, int hCoefsSize, PrecisionType** hCoefs,
+    int colorChannel){
 
     // Get scale ratios
     PrecisionType scaleHeightRatio = static_cast<PrecisionType>(dstHeight) / static_cast<PrecisionType>(srcHeight);
@@ -653,6 +672,8 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
     for(int lin = 0; lin < dstHeight; lin++){
         // Calculate once the target line coordinate
         int targetLine = lin * dstWidth;
+        // Calculate once the line index of coefficients
+        int indexLinCoef = lin % vCoefsSize;
 
         // Original line index coordinate
         PrecisionType linOriginal = (static_cast<PrecisionType>(lin) + static_cast<PrecisionType>(.5)) / scaleHeightRatio;
@@ -667,6 +688,9 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
 
         // Iterate through each column of the scaled image
         for(int col = 0; col < dstWidth; col++){
+            // Calculate once the column index of coefficients
+            int indexColCoef = col % hCoefsSize;
+
             // Original line index coordinate
             PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(.5)) / scaleWidthRatio;
 
@@ -679,32 +703,27 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
             PrecisionType startColPosition = leftPixel + offsetH;
 
             // Temporary variables used in the interpolation
-            PrecisionType colorAcc = static_cast<PrecisionType>(0.);
-            PrecisionType weightAcc = static_cast<PrecisionType>(0.);
-
+            PrecisionType result = static_cast<PrecisionType>(0.);
             // Calculate resulting color from coefficients
             for(int indexV = 0; indexV < numVCoefs; indexV++){
                 // Access once the memory
-                PrecisionType vCoef = vCoefs[lin % vCoefsSize][indexV];
+                PrecisionType vCoef = vCoefs[indexLinCoef][indexV];
 
                 for(int indexH = 0; indexH < numHCoefs; indexH++){
                     // Access once the memory
-                    PrecisionType hCoef = hCoefs[col % hCoefsSize][indexH];
+                    PrecisionType hCoef = hCoefs[indexColCoef][indexH];
 
                     // Get pixel from source data
-                    uint8_t colorHolder = getPixel(upperPixel + offsetV + indexV, leftPixel + offsetH + indexH, srcWidth, srcHeight, srcData);
+                    uint8_t colorHolder = getPixel(startLinPosition + indexV, startColPosition + indexH, srcWidth, srcHeight, srcData);
 
                     // Calculate pixel color weight
                     PrecisionType weight = vCoef * hCoef;
 
                     // Weights neighboring pixel and add it to the result
-                    colorAcc += static_cast<PrecisionType>(colorHolder) * weight;
-                    weightAcc += weight;
+                    result += static_cast<PrecisionType>(colorHolder) * weight;
                 }
             }
 
-            // Calculate resulting color
-            PrecisionType result = colorAcc / weightAcc;
             // Clamp value to avoid undershooting and overshooting
             if(colorChannel == 0)
                 clamp<PrecisionType>(result, static_cast<PrecisionType>(16.), static_cast<PrecisionType>(235.));
@@ -716,9 +735,11 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
     }
 }
 
-// Prepares the scaling operation
+// Prepares the resample operation
 template <class PrecisionType>
-int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation){
+int sequential_resample_aux(AVFrame* src, AVFrame* dst, int operation){
+    // Return value of this method
+    int returnValue = 0;
 
     // Access once
     int srcWidth = src->width, srcHeight = src->height;
@@ -726,139 +747,102 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation){
     int dstWidth = dst->width, dstHeight = dst->height;
     int dstFormat = dst->format;
 
-    // Check if is only a resample operation
-    bool isOnlyResample = false;
-    if(srcWidth == dstWidth && srcHeight == dstHeight)
-        isOnlyResample = true;
+    // Check if is only a format conversion
+    bool isOnlyFormatConversion = srcWidth == dstWidth && srcHeight == dstHeight;
 
     // Initialize needed variables if it is a scaling operation
-    int scalingSupportedFormat;
-    if(srcFormat == AV_PIX_FMT_V210 && dstFormat == AV_PIX_FMT_V210)
-        scalingSupportedFormat = AV_PIX_FMT_YUV422PNORM;
-    else
-        scalingSupportedFormat = getTempScaleFormat(srcFormat);
+    int scalingSupportedFormat = getTempScaleFormat(srcFormat, dstFormat);
 
-    #pragma region INITIALIZE TEMPORARY FRAMES
-    // Temporary frames used in intermediate operations
-    uint8_t* resampleBuffer, *scaleBuffer;
-    AVFrame* resampleFrame, *scaleFrame;
+    // Temporary buffers used in intermediate operations
+    uint8_t** formatConversionBuffer, **resizeBuffer;
 
-    // Only initializes frames if is not only a resample opreration
-    if(!isOnlyResample){
-        // Initialize temporary frame buffers
-        if(createImageDataBuffer(srcWidth, srcHeight, scalingSupportedFormat, &resampleBuffer) < 0)
-            return -1;
-        if(createImageDataBuffer(dstWidth, dstHeight, scalingSupportedFormat, &scaleBuffer) < 0){
-            free(resampleBuffer);
-            return -1;
-        }
+    // Last format conversion buffers
+    uint8_t** lastFormatConversionBuffer = src->data;
+    int lastFormatConversionPixelFormat = srcFormat;
 
-        // Initialize temporary frames
-        if(initializeAVFrame(&resampleBuffer, srcWidth, srcHeight, scalingSupportedFormat, &resampleFrame) < 0){
-            free(resampleBuffer);
-            free(scaleBuffer);
-            return -1;
-        }
-        if(initializeAVFrame(&scaleBuffer, dstWidth, dstHeight, scalingSupportedFormat, &scaleFrame) < 0){
-            av_frame_free(&resampleFrame);
-            free(resampleBuffer);
-            free(scaleBuffer);
-            return -1;
-        }
-    }
-    #pragma endregion
+    // Rescaling operation branch
+    if(!isOnlyFormatConversion){
+        // Allocate temporary buffers
+        allocBuffers(formatConversionBuffer, srcWidth, srcHeight, scalingSupportedFormat);
+        allocBuffers(resizeBuffer, dstWidth, dstHeight, scalingSupportedFormat);
 
-    // Last resample frame
-    AVFrame* lastResampleFrame = src;
-    int lastResamplePixelFormat = srcFormat;
-
-    #pragma region RESIZE OPERATION
-    // Verify if is not only a resample operation
-    if(!isOnlyResample){
         // Resamples image to a supported format
-        if(sequential_resampler<PrecisionType>(srcWidth, srcHeight, srcFormat, src->data, src->linesize,
-            srcWidth, srcHeight, scalingSupportedFormat, resampleFrame->data, resampleFrame->linesize) < 0){
-            av_frame_free(&resampleFrame);
-            av_frame_free(&scaleFrame);
-            free(resampleBuffer);
-            free(scaleBuffer);
-            return -2;
+        if(sequential_formatConversion<PrecisionType>(srcWidth, srcHeight,
+            srcFormat, src->data,
+            scalingSupportedFormat, formatConversionBuffer) < 0){
+            returnValue = -1;
+            goto END;
         }
 
-        // Temporary variables for precalculation of coefficients
+        // Needed resources for coefficients calculations
         PrecisionType(*coefFunc)(PrecisionType) = getCoefMethod<PrecisionType>(operation);
-        int pixelSupportV = getPixelSupport(operation, max<int>(round((static_cast<PrecisionType>(srcHeight) / static_cast<PrecisionType>(dstHeight)) / static_cast<PrecisionType>(2.)) * 2, 1));
-        int pixelSupportH = getPixelSupport(operation, max<int>(round((static_cast<PrecisionType>(srcWidth) / static_cast<PrecisionType>(dstWidth)) / static_cast<PrecisionType>(2.)) * 2, 1));
-        int pixelSupport = max<int>(pixelSupportV, pixelSupportH);
+        int pixelSupport = getPixelSupport(operation);
 
-        // Create variables for precalculated coefficients
+        // Variables for precalculated coefficients
         PrecisionType** vCoefs;
         int vCoefsSize = sequential_preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
         PrecisionType** hCoefs;
         int hCoefsSize = sequential_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
 
-        // Calculate the chroma size depending on the source data pixel format
-        float tempWidthRatio = 1.f;
-        float tempHeightRatio = 1.f;
-        if(scalingSupportedFormat == AV_PIX_FMT_YUV422P || scalingSupportedFormat == AV_PIX_FMT_YUV420P || scalingSupportedFormat == AV_PIX_FMT_YUV422PNORM)
-            tempWidthRatio = 0.5f;
+        // Chroma size discovery
+        float widthPerc = 1.f;
+        float heightPerc = 1.f;
+        if(scalingSupportedFormat == AV_PIX_FMT_YUV422P ||
+            scalingSupportedFormat == AV_PIX_FMT_YUV420P ||
+            scalingSupportedFormat == AV_PIX_FMT_YUV422PNORM)
+            widthPerc = 0.5f;
         if(scalingSupportedFormat == AV_PIX_FMT_YUV420P)
-            tempHeightRatio = 0.5f;
+            heightPerc = 0.5f;
 
         // Apply the resizing operation to luma channel
-        sequential_resize<PrecisionType>(srcWidth, srcHeight, resampleFrame->data[0],
-            dstWidth, dstHeight, scaleFrame->data[0], operation,
+        sequential_resize<PrecisionType>(srcWidth, srcHeight, formatConversionBuffer[0],
+            dstWidth, dstHeight, resizeBuffer[0], operation,
             pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, 0);
 
         // Apply the resizing operation to chroma channels
+        int srcWidthChroma = static_cast<int>(srcWidth * widthPerc);
+        int srcHeightChroma = static_cast<int>(srcHeight * heightPerc);
+        int dstWidthChroma = static_cast<int>(dstWidth * widthPerc);
+        int dstHeightChroma = static_cast<int>(dstHeight * heightPerc);
         for(int colorChannel = 1; colorChannel < 3; colorChannel++){
-            sequential_resize<PrecisionType>(static_cast<int>(srcWidth * tempWidthRatio), static_cast<int>(srcHeight * tempHeightRatio), resampleFrame->data[colorChannel],
-                static_cast<int>(dstWidth * tempWidthRatio), static_cast<int>(dstHeight * tempHeightRatio), scaleFrame->data[colorChannel], operation,
+            sequential_resize<PrecisionType>(srcWidthChroma, srcHeightChroma, formatConversionBuffer[colorChannel],
+                dstWidthChroma, dstHeightChroma, resizeBuffer[colorChannel], operation,
                 pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, colorChannel);
         }
 
-        // Free used resources
-        av_frame_free(&resampleFrame);
-        free(resampleBuffer);
-        for(int i = 0; i < vCoefsSize; i++)
-            free(vCoefs[i]);
-        for(int i = 0; i < hCoefsSize; i++)
-            free(hCoefs[i]);
-        free(vCoefs);
-        free(hCoefs);
 
         // Assign correct values to apply last resample
-        lastResampleFrame = scaleFrame;
-        lastResamplePixelFormat = scalingSupportedFormat;
-    }
-    #pragma endregion
+        lastFormatConversionBuffer = resizeBuffer;
+        lastFormatConversionPixelFormat = scalingSupportedFormat;
 
-    #pragma region LAST RESAMPLE
-    // Last resample to destination frame
-    if(sequential_resampler<PrecisionType>(dstWidth, dstHeight, lastResamplePixelFormat, lastResampleFrame->data, lastResampleFrame->linesize,
-        dstWidth, dstHeight, dstFormat, dst->data, dst->linesize) < 0){
-        if(!isOnlyResample){
-            av_frame_free(&scaleFrame);
-            free(scaleBuffer);
-        }
-        return -2;
+        // Free used resources
+        free2dBuffer<PrecisionType>(vCoefs, vCoefsSize);
+        free2dBuffer<PrecisionType>(hCoefs, hCoefsSize);
     }
-    #pragma endregion
 
+    // Resamples image to a target format
+    if(sequential_formatConversion<PrecisionType>(dstWidth, dstHeight,
+        lastFormatConversionPixelFormat, lastFormatConversionBuffer,
+        dstFormat, dst->data) < 0){
+        returnValue = -1;
+        goto END;
+    }
+
+    END:
     // Free used resources
-    if(!isOnlyResample){
-        av_frame_free(&scaleFrame);
-        free(scaleBuffer);
+    if(!isOnlyFormatConversion){
+        free2dBuffer<uint8_t>(formatConversionBuffer, 3);
+        free2dBuffer<uint8_t>(resizeBuffer, 3);
     }
 
-    //Success
-    return 0;
+    // Return negative if insuccess
+    return returnValue;
 }
 
-// Wrapper for the sequential scale operation method
-int sequential_scale(AVFrame* src, AVFrame* dst, int operation){
+// Wrapper for the sequential resample operation method
+int sequential_resample(AVFrame* src, AVFrame* dst, int operation){
     // Variables used
-    int retVal = -1, duration = -1;
+    int duration = -1;
     high_resolution_clock::time_point initTime, stopTime;
 
     // Verify valid frames
@@ -906,21 +890,12 @@ int sequential_scale(AVFrame* src, AVFrame* dst, int operation){
     initTime = high_resolution_clock::now();
 
     // Apply the scaling operation
-    retVal = sequential_scale_aux<double>(src, dst, operation);
-    if(retVal < 0){
-        string error = "[SEQUENTIAL] Operation could not be done (";
-
-        if(retVal == -1)
-            error += "error initializing frames)!";
-
-        if(retVal == -2)
-            error += "resample - conversion not supported)!";
-
+    if(sequential_resample_aux<double>(src, dst, operation) < 0){
         // Display error
-        cerr << error << endl;
+        cerr << "[SEQUENTIAL] Operation could not be done (resample - conversion not supported)!" << endl;
 
         // Insuccess
-        return retVal;
+        return -1;
     }
 
     // Stop counting operation execution time

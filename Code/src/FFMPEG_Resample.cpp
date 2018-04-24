@@ -1,6 +1,6 @@
-#include "FFMPEG_Scale.h"
+#include "FFMPEG_Resample.h"
 
-int ffmpeg_scale(AVFrame* srcFrame, AVFrame* dstFrame, int operation){
+int ffmpeg_resample(AVFrame* srcFrame, AVFrame* dstFrame, int operation){
     // Variables used
     int duration = -1;
     SwsContext* swsContext;
@@ -8,8 +8,8 @@ int ffmpeg_scale(AVFrame* srcFrame, AVFrame* dstFrame, int operation){
 
     // Create operation context
     swsContext = sws_getContext(srcFrame->width, srcFrame->height, (AVPixelFormat) srcFrame->format,
-                                dstFrame->width, dstFrame->height, (AVPixelFormat) dstFrame->format,
-                                operation, NULL, NULL, NULL);
+        dstFrame->width, dstFrame->height, (AVPixelFormat) dstFrame->format,
+        operation, NULL, NULL, NULL);
 
     // Verify if scaling context was created
     if(!swsContext){
