@@ -15,3 +15,13 @@ int lcm(int num1, int num2){
     // Insuccess
     return num1 * num2;
 }
+
+// Return the nearest value of num2 that is a divisor of num1
+int greatestDivisor(int num1, int num2){
+    int holder = num2;
+    // Find the greatest divisor
+    while(num1 % holder != 0)
+        holder--;
+
+    return holder;
+}
