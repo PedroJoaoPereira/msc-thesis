@@ -52,9 +52,10 @@ int main(){
 
     // Import all images into a vector
     vector<ImageClass*> allImgs = vector<ImageClass*>();
-    allImgs.push_back(img_v210_1920x1080);
     allImgs.push_back(img_uyvy422_1920x1080);
     allImgs.push_back(img_yuv422p_1920x1080);
+    allImgs.push_back(img_yuv420p_1920x1080);
+    allImgs.push_back(img_v210_1920x1080);
 
     // Load all images
     for(int index = 0; index < allImgs.size(); index++)
@@ -88,21 +89,44 @@ int main(){
     yuv422pResampleInImgs.push_back(img_yuv422p_1920x1080);
     vector<ImageClass*> yuv422pResampleOutImgs = vector<ImageClass*>();
     //yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-    yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
+    //yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
     //yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
     //yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
-    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, yuv422pResampleInImgs, yuv422pResampleOutImgs, resampleOperations, nTimes);
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, yuv422pResampleInImgs, yuv422pResampleOutImgs, resampleOperations, nTimes);
 
     // RESAMPLE V210 ------------------------------------------------
     vector<ImageClass*> v210ResampleInImgs = vector<ImageClass*>();
     v210ResampleInImgs.push_back(img_v210_1920x1080);
     vector<ImageClass*> v210ResampleOutImgs = vector<ImageClass*>();
-    v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-    v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
-    v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422PNORM));
+    //v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
+    //v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
+    //v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422PNORM));
 
     //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, v210ResampleInImgs, v210ResampleOutImgs, resampleOperations, nTimes);
+
+    // RESAMPLE MAINTAIN --------------------------------------------
+    vector<ImageClass*> maintain1ResampleInImgs = vector<ImageClass*>();
+    maintain1ResampleInImgs.push_back(img_uyvy422_1920x1080);
+    vector<ImageClass*> maintain1ResampleOutImgs = vector<ImageClass*>();
+    maintain1ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
+    vector<ImageClass*> maintain2ResampleInImgs = vector<ImageClass*>();
+    maintain2ResampleInImgs.push_back(img_yuv422p_1920x1080);
+    vector<ImageClass*> maintain2ResampleOutImgs = vector<ImageClass*>();
+    maintain2ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
+    vector<ImageClass*> maintain3ResampleInImgs = vector<ImageClass*>();
+    maintain3ResampleInImgs.push_back(img_yuv420p_1920x1080);
+    vector<ImageClass*> maintain3ResampleOutImgs = vector<ImageClass*>();
+    maintain3ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
+    vector<ImageClass*> maintain4ResampleInImgs = vector<ImageClass*>();
+    maintain4ResampleInImgs.push_back(img_v210_1920x1080);
+    vector<ImageClass*> maintain4ResampleOutImgs = vector<ImageClass*>();
+    maintain4ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
+
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, maintain1ResampleInImgs, maintain1ResampleOutImgs, resampleOperations, nTimes);
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, maintain2ResampleInImgs, maintain2ResampleOutImgs, resampleOperations, nTimes);
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, maintain3ResampleInImgs, maintain3ResampleOutImgs, resampleOperations, nTimes);
+    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, maintain4ResampleInImgs, maintain4ResampleOutImgs, resampleOperations, nTimes);
 
     // TEST SCALING -------------------------------------------------
 

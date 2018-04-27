@@ -110,8 +110,26 @@ pair<dim3, dim3> calculateConversionLP(int width, int height, int srcPixelFormat
         result.first = dim3(width * 2, height);
     else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210)
         result.first = dim3(width * 2 / 3, height);
+    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV422P)
+        result.first = dim3(width / 2, height);
     else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422)
         result.first = dim3(width / 2, height);
+    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P)
+        result.first = dim3(width / 2, height / 2);
+    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12)
+        result.first = dim3(width / 2, height / 2);
+    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210)
+        result.first = dim3(width / 6, height);
+    else if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV420P)
+        result.first = dim3(width / 2, height / 2);
+    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422)
+        result.first = dim3(width / 6, height);
+    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_V210)
+        result.first = dim3(width / 6 * 4, height);
+    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422P)
+        result.first = dim3(width / 6, height);
+    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422PNORM)
+        result.first = dim3(width / 6, height);
 
     // Calculate thread size
     int hDivisor = greatestDivisor(result.first.x, 16);
@@ -133,18 +151,18 @@ __global__ void cuda_formatConversion(int width, int height,
     int srcPixelFormat, uint8_t* srcSlice0, uint8_t* srcSlice1, uint8_t* srcSlice2,
     int dstPixelFormat, uint8_t* dstSlice0, uint8_t* dstSlice1, uint8_t* dstSlice2){
 
+    // Calculate pixel location
+    int lin = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
     // REORGANIZE COMPONENTS -------------------------
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422){
-        // Calculate pixel location
-        int lin = blockIdx.y * blockDim.y + threadIdx.y;
-        int col = blockIdx.x * blockDim.x + threadIdx.x;
-
         // Calculate once
-        int offset = lin * width * 2 + col;
+        int linMulWidthMul2PlCol = lin * width * 2 + col;
 
         // Calculate source index
-        auto srcBuffer = srcSlice0 + offset;
-        auto dstBuffer = dstSlice0 + offset;
+        auto srcBuffer = srcSlice0 + linMulWidthMul2PlCol;
+        auto dstBuffer = dstSlice0 + linMulWidthMul2PlCol;
 
         *dstBuffer = *srcBuffer;
 
@@ -152,10 +170,6 @@ __global__ void cuda_formatConversion(int width, int height,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
-        // Calculate pixel location
-        int lin = blockIdx.y * blockDim.y + threadIdx.y;
-        int col = blockIdx.x * blockDim.x + threadIdx.x;
-
         // Calculate once
         int whichCol = threadIdx.x % 4;
         int linMulWidth = lin * width;
@@ -187,10 +201,6 @@ __global__ void cuda_formatConversion(int width, int height,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
-        // Calculate pixel location
-        int lin = blockIdx.y * blockDim.y + threadIdx.y;
-        int col = blockIdx.x * blockDim.x + threadIdx.x;
-
         // Calculate once
         int whichCol = threadIdx.x % 4;
         int linMulWidth = lin * width;
@@ -222,10 +232,6 @@ __global__ void cuda_formatConversion(int width, int height,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
-        // Calculate pixel location
-        int lin = blockIdx.y * blockDim.y + threadIdx.y;
-        int col = blockIdx.x * blockDim.x + threadIdx.x;
-
         // Calculate once
         int whichCol = threadIdx.x % 4;
         int linMulWidth = lin * width;
@@ -257,10 +263,6 @@ __global__ void cuda_formatConversion(int width, int height,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210){
-        // Calculate pixel location
-        int lin = blockIdx.y * blockDim.y + threadIdx.y;
-        int col = blockIdx.x * blockDim.x + threadIdx.x;
-
         // Calculate once
         int linMulWidth = lin * width;
 
@@ -280,19 +282,40 @@ __global__ void cuda_formatConversion(int width, int height,
         return;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
-        // Calculate pixel location
-        int lin = blockIdx.y * blockDim.y + threadIdx.y;
-        int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Calculate once
+        int linMulWidth = lin * width;
+        int linMulWidthPlColMul2 = linMulWidth + col * 2;
+        int linMulWidthDiv2PlCol = linMulWidth / 2 + col;
 
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidthPlColMul2;
+        auto dstBuffer = dstSlice0 + linMulWidthPlColMul2;
+
+        auto srcBufferChromaU = srcSlice1 + linMulWidthDiv2PlCol;
+        auto srcBufferChromaV = srcSlice2 + linMulWidthDiv2PlCol;
+        auto dstBufferChromaU = dstSlice1 + linMulWidthDiv2PlCol;
+        auto dstBufferChromaV = dstSlice2 + linMulWidthDiv2PlCol;
+
+        // Assign values
+        *dstBuffer++ = *srcBuffer++;
+        *dstBuffer = *srcBuffer;
+        *dstBufferChromaU = *srcBufferChromaU;
+        *dstBufferChromaV = *srcBufferChromaV;
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Calculate once
         int linMulWidth = lin * width;
         int linMulWidthDiv2 = linMulWidth / 2;
+        int linMulWidthDiv2PlCol = linMulWidthDiv2 + col;
 
         // Calculate source index
         auto srcBuffer = srcSlice0 + linMulWidth + col * 2;
-        auto srcBufferChromaU = srcSlice1 + linMulWidthDiv2 + col;
-        auto srcBufferChromaV = srcSlice2 + linMulWidthDiv2 + col;
+        auto srcBufferChromaU = srcSlice1 + linMulWidthDiv2PlCol;
+        auto srcBufferChromaV = srcSlice2 + linMulWidthDiv2PlCol;
         auto dstBuffer = dstSlice0 + linMulWidth * 2 + col * 4;
 
         // Assigne values to dst buffer
@@ -300,6 +323,314 @@ __global__ void cuda_formatConversion(int width, int height,
         *dstBuffer++ = *srcBuffer++; // Y0
         *dstBuffer++ = *srcBufferChromaV; // V0
         *dstBuffer++ = *srcBuffer; // Y1
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Calculate once
+        int linMulWidth = lin * width;
+        int linMulWidthMul2PlColMul2 = linMulWidth * 2 + col * 2;
+        int widthDiv2 = width / 2;
+        int linMulWidthDiv2 = lin * widthDiv2;
+
+        linMulWidth += col;
+        linMulWidthDiv2 += col;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidthMul2PlColMul2;
+        auto srcBufferBelow = srcBuffer + width;
+        auto dstBuffer = dstSlice0 + linMulWidthMul2PlColMul2;
+        auto dstBufferBelow = dstBuffer + width;
+
+        auto srcBufferChromaU = srcSlice1 + linMulWidth;
+        auto srcBufferChromaUBelow = srcBufferChromaU + widthDiv2;
+        auto dstBufferChromaU = dstSlice1 + linMulWidthDiv2;
+
+        auto srcBufferChromaV = srcSlice2 + linMulWidth;
+        auto srcBufferChromaVBelow = srcBufferChromaV + widthDiv2;
+        auto dstBufferChromaV = dstSlice2 + linMulWidthDiv2;
+
+        // Assigne values
+        *dstBuffer++ = *srcBuffer++;
+        *dstBuffer = *srcBuffer;
+        *dstBufferBelow++ = *srcBufferBelow++;
+        *dstBufferBelow = *srcBufferBelow;
+
+        *dstBufferChromaU = uint8_t(llround((*srcBufferChromaU + *srcBufferChromaUBelow) / 2.));
+        *dstBufferChromaV = uint8_t(llround((*srcBufferChromaV + *srcBufferChromaVBelow) / 2.));
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Calculate once
+        int linMulWidth = lin * width;
+        int linMulWidthMul2PlColMul2 = linMulWidth * 2 + col * 2;
+        int widthDiv2 = width / 2;
+
+        linMulWidth += col;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidthMul2PlColMul2;
+        auto srcBufferBelow = srcBuffer + width;
+        auto dstBuffer = dstSlice0 + linMulWidthMul2PlColMul2;
+        auto dstBufferBelow = dstBuffer + width;
+
+        auto srcBufferChromaU = srcSlice1 + linMulWidth;
+        auto srcBufferChromaUBelow = srcBufferChromaU + widthDiv2;
+
+        auto srcBufferChromaV = srcSlice2 + linMulWidth;
+        auto srcBufferChromaVBelow = srcBufferChromaV + widthDiv2;
+
+        auto dstBufferChroma = dstSlice1 + linMulWidth + col;
+
+        // Assigne values
+        *dstBuffer++ = *srcBuffer++;
+        *dstBuffer = *srcBuffer;
+        *dstBufferBelow++ = *srcBufferBelow++;
+        *dstBufferBelow = *srcBufferBelow;
+
+        *dstBufferChroma++ = uint8_t(llround((*srcBufferChromaU + *srcBufferChromaUBelow) / 2.));
+        *dstBufferChroma = uint8_t(llround((*srcBufferChromaV + *srcBufferChromaVBelow) / 2.));
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210){
+        // Calculate once
+        int linMulWidth = lin * width;
+        int linMulWidthDiv2 = linMulWidth / 2;
+        
+        linMulWidthDiv2 += col * 3;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidth + col * 6;
+        auto srcBufferChromaU = srcSlice1 + linMulWidthDiv2;
+        auto srcBufferChromaV = srcSlice2 + linMulWidthDiv2;
+        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice0);
+        dstBuffer += linMulWidth / 6 * 4 + col * 4;
+
+        // Upsample to 10 bits
+        auto u0 = *srcBufferChromaU++ << 2U; // U0
+        auto y0 = *srcBuffer++ << 2U; // Y0
+        auto v0 = *srcBufferChromaV++ << 2U; // V0
+        auto y1 = *srcBuffer++ << 2U; // Y1
+
+        auto u1 = *srcBufferChromaU++ << 2U; // U1
+        auto y2 = *srcBuffer++ << 2U; // Y2
+        auto v1 = *srcBufferChromaV++ << 2U; // V1
+        auto y3 = *srcBuffer++ << 2U; // Y3
+
+        auto u2 = *srcBufferChromaU << 2U; // U2
+        auto y4 = *srcBuffer++ << 2U; // Y4
+        auto v2 = *srcBufferChromaV << 2U; // V2
+        auto y5 = *srcBuffer << 2U; // Y5
+
+        // Assign value
+        *dstBuffer++ = (v0 << 20U) | (y0 << 10U) | u0;
+        *dstBuffer++ = (y2 << 20U) | (u1 << 10U) | y1;
+        *dstBuffer++ = (u2 << 20U) | (y3 << 10U) | v1;
+        *dstBuffer = (y5 << 20U) | (v2 << 10U) | y4;
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Calculate once
+        int linMulWidth = lin * width;
+        int linMulWidthMul2PlColMul2 = linMulWidth * 2 + col * 2;
+        int linMulWidthDiv2PlCol = linMulWidth / 2 + col;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidthMul2PlColMul2;
+        auto srcBufferBelow = srcBuffer + width;
+        auto dstBuffer = dstSlice0 + linMulWidthMul2PlColMul2;
+        auto dstBufferBelow = dstBuffer + width;
+
+        auto srcBufferChromaU = srcSlice1 + linMulWidthDiv2PlCol;
+        auto srcBufferChromaV = srcSlice2 + linMulWidthDiv2PlCol;
+        auto dstBufferChromaU = dstSlice1 + linMulWidthDiv2PlCol;
+        auto dstBufferChromaV = dstSlice2 + linMulWidthDiv2PlCol;
+
+        // Assign values
+        *dstBuffer++ = *srcBuffer++;
+        *dstBuffer = *srcBuffer;
+        *dstBufferBelow++ = *srcBufferBelow++;
+        *dstBufferBelow = *srcBufferBelow;
+
+        *dstBufferChromaU = *srcBufferChromaU;
+        *dstBufferChromaV = *srcBufferChromaV;
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_V210){
+        // Calculate once
+        int offset = lin * width / 6 * 4 + col;
+
+        // Calculate source index
+        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice0);
+        srcBuffer += offset;
+        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice0);
+        dstBuffer += offset;
+
+        // Assign values
+        *dstBuffer = *srcBuffer;
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Calculate once
+        int linMulWidth = lin * width;
+
+        // Calculate source index
+        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice0);
+        srcBuffer += linMulWidth / 6 * 4 + col * 4;
+        auto dstBuffer = dstSlice0 + linMulWidth * 2 + col * 12;
+
+        // Downsample 10 to 8 bits
+        auto u0 = (*srcBuffer >> 2U) & 0xFF; // U0
+        auto y0 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // Y0
+        auto v0 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // V0
+        *srcBuffer++;
+
+        auto y1 = (*srcBuffer >> 2U) & 0xFF; // Y1
+        auto u1 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // U1
+        auto y2 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // Y2
+        *srcBuffer++;
+
+        auto v1 = (*srcBuffer >> 2U) & 0xFF; // V1
+        auto y3 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // Y3
+        auto u2 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // U2
+        *srcBuffer++;
+
+        auto y4 = (*srcBuffer >> 2U) & 0xFF; // Y4
+        auto v2 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // V2
+        auto y5 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // Y5
+
+        *(dstBuffer++) = u0;
+        *(dstBuffer++) = y0;
+        *(dstBuffer++) = v0;
+        *(dstBuffer++) = y1;
+
+        *(dstBuffer++) = u1;
+        *(dstBuffer++) = y2;
+        *(dstBuffer++) = v1;
+        *(dstBuffer++) = y3;
+
+        *(dstBuffer++) = u2;
+        *(dstBuffer++) = y4;
+        *(dstBuffer++) = v2;
+        *(dstBuffer) = y5;
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Calculate once
+        int colMul3 = col * 3;
+        int linMulWidth = lin * width;
+        int linMulWidthDiv2 = linMulWidth / 2;
+
+        // Calculate source index
+        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice0);
+        srcBuffer += linMulWidth / 6 * 4 + col * 4;
+        auto dstBuffer = dstSlice0 + linMulWidth + col * 6;
+        auto dstBufferChromaU = dstSlice1 + linMulWidthDiv2 + colMul3;
+        auto dstBufferChromaV = dstSlice2 + linMulWidthDiv2 + colMul3;
+
+        // Downsample 10 to 8 bits
+        auto u0 = (*srcBuffer >> 2U) & 0xFF; // U0
+        auto y0 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // Y0
+        auto v0 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // V0
+        *srcBuffer++;
+
+        auto y1 = (*srcBuffer >> 2U) & 0xFF; // Y1
+        auto u1 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // U1
+        auto y2 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // Y2
+        *srcBuffer++;
+
+        auto v1 = (*srcBuffer >> 2U) & 0xFF; // V1
+        auto y3 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // Y3
+        auto u2 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // U2
+        *srcBuffer++;
+
+        auto y4 = (*srcBuffer >> 2U) & 0xFF; // Y4
+        auto v2 = ((*srcBuffer >> 2U) >> 10U) & 0xFF; // V2
+        auto y5 = ((*srcBuffer >> 2U) >> 20U) & 0xFF; // Y5
+
+        *(dstBufferChromaU++) = u0;
+        *(dstBuffer++) = y0;
+        *(dstBufferChromaV++) = v0;
+        *(dstBuffer++) = y1;
+
+        *(dstBufferChromaU++) = u1;
+        *(dstBuffer++) = y2;
+        *(dstBufferChromaV++) = v1;
+        *(dstBuffer++) = y3;
+
+        *(dstBufferChromaU) = u2;
+        *(dstBuffer++) = y4;
+        *(dstBufferChromaV) = v2;
+        *(dstBuffer) = y5;
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422PNORM){
+        // Calculate once
+        int colMul3 = col * 3;
+        int linMulWidth = lin * width;
+        int linMulWidthDiv2 = linMulWidth / 2;
+
+        // Calculate source index
+        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice0);
+        srcBuffer += linMulWidth / 6 * 4 + col * 4;
+        auto dstBuffer = dstSlice0 + linMulWidth + col * 6;
+        auto dstBufferChromaU = dstSlice1 + linMulWidthDiv2 + colMul3;
+        auto dstBufferChromaV = dstSlice2 + linMulWidthDiv2 + colMul3;
+
+        // Downsample 10 to 8 bits
+        auto u0 = *srcBuffer & 0x3FF; // U0
+        auto y0 = (*srcBuffer >> 10U) & 0x3FF; // Y0
+        auto v0 = (*srcBuffer >> 20U) & 0x3FF; // V0
+        *srcBuffer++;
+
+        auto y1 = *srcBuffer & 0x3FF; // Y1
+        auto u1 = (*srcBuffer >> 10U) & 0x3FF; // U1
+        auto y2 = (*srcBuffer >> 20U) & 0x3FF; // Y2
+        *srcBuffer++;
+
+        auto v1 = *srcBuffer & 0x3FF; // V1
+        auto y3 = (*srcBuffer >> 10U) & 0x3FF; // Y3
+        auto u2 = (*srcBuffer >> 20U) & 0x3FF; // U2
+        *srcBuffer++;
+
+        auto y4 = *srcBuffer & 0x3FF; // Y4
+        auto v2 = (*srcBuffer >> 10U) & 0x3FF; // V2
+        auto y5 = (*srcBuffer >> 20U) & 0x3FF; // Y5
+
+        // Calculate once
+        double valueConstLuma = 219. / 1023.;
+        double valueConstChroma = 224. / 1023.;
+        double value16 = 16.;
+
+        *(dstBufferChromaU++) = uint8_t(llround(u0 * valueConstChroma + value16));
+        *(dstBuffer++) = uint8_t(llround(y0 * valueConstLuma + value16));
+        *(dstBufferChromaV++) = uint8_t(llround(v0 * valueConstChroma + value16));
+        *(dstBuffer++) = uint8_t(llround(y1 * valueConstLuma + value16));
+
+        *(dstBufferChromaU++) = uint8_t(llround(u1 * valueConstChroma + value16));
+        *(dstBuffer++) = uint8_t(llround(y2 * valueConstLuma + value16));
+        *(dstBufferChromaV++) = uint8_t(llround(v1 * valueConstChroma + value16));
+        *(dstBuffer++) = uint8_t(llround(y3 * valueConstLuma + value16));
+
+        *(dstBufferChromaU) = uint8_t(llround(u2 * valueConstChroma + value16));
+        *(dstBuffer++) = uint8_t(llround(y4 * valueConstLuma + value16));
+        *(dstBufferChromaV) = uint8_t(llround(v2 * valueConstChroma + value16));
+        *(dstBuffer) = uint8_t(llround(y5 * valueConstLuma + value16));
 
         return;
     }
