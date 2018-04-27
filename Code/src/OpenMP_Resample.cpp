@@ -47,10 +47,10 @@ int omp_formatConversion(int srcWidth, int srcHeight,
             auto dstBufferChromaU = dstSlice[1] + index;
             auto dstBufferChromaV = dstSlice[2] + index;
 
-            PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
-            PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
-            PrecisionType v0 = static_cast<PrecisionType>(*srcBuffer++); // V0
-            PrecisionType y1 = static_cast<PrecisionType>(*srcBuffer++); // Y1
+            uint8_t u0 = *srcBuffer++; // U0
+            uint8_t y0 = *srcBuffer++; // Y0
+            uint8_t v0 = *srcBuffer++; // V0
+            uint8_t y1 = *srcBuffer++; // Y1
 
             *dstBuffer++ = y0;
             *dstBuffer++ = y1;
@@ -87,15 +87,15 @@ int omp_formatConversion(int srcWidth, int srcHeight,
             auto dstBufferChromaV = dstSlice[2] + linStrideDiv4;
 
             for(int col = 0; col < strideDiv4; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
-                PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBuffer++); // V0
-                PrecisionType y1 = static_cast<PrecisionType>(*srcBuffer++); // Y1
+                uint8_t u0 = *srcBuffer++; // U0
+                uint8_t y0 = *srcBuffer++; // Y0
+                uint8_t v0 = *srcBuffer++; // V0
+                uint8_t y1 = *srcBuffer++; // Y1
 
                 srcBufferBelow++;
-                PrecisionType y2 = static_cast<PrecisionType>(*srcBufferBelow++); // Y2
+                uint8_t y2 = *srcBufferBelow++; // Y2
                 srcBufferBelow++;
-                PrecisionType y3 = static_cast<PrecisionType>(*srcBufferBelow++); // Y3
+                uint8_t y3 = *srcBufferBelow++; // Y3
 
                 *dstBuffer++ = y0;
                 *dstBuffer++ = y1;
@@ -135,15 +135,15 @@ int omp_formatConversion(int srcWidth, int srcHeight,
             auto dstBufferChroma = dstSlice[1] + lin * strideDiv2;
 
             for(int col = 0; col < strideDiv4; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
-                PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBuffer++); // V0
-                PrecisionType y1 = static_cast<PrecisionType>(*srcBuffer++); // Y1
+                uint8_t u0 = *srcBuffer++; // U0
+                uint8_t y0 = *srcBuffer++; // Y0
+                uint8_t v0 = *srcBuffer++; // V0
+                uint8_t y1 = *srcBuffer++; // Y1
 
                 srcBufferBelow++;
-                PrecisionType y2 = static_cast<PrecisionType>(*srcBufferBelow++); // Y2
+                uint8_t y2 = *srcBufferBelow++; // Y2
                 srcBufferBelow++;
-                PrecisionType y3 = static_cast<PrecisionType>(*srcBufferBelow++); // Y3
+                uint8_t y3 = *srcBufferBelow++; // Y3
 
                 *dstBuffer++ = y0;
                 *dstBuffer++ = y1;

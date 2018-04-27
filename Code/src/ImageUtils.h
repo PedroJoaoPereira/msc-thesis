@@ -13,6 +13,11 @@ extern "C"{
 #define AV_PIX_FMT_V210 -2
 #define AV_PIX_FMT_YUV422PNORM -3
 
+// int inFormat     - pixel format of the input data
+// int outFormat    - pixel format of the input data
+// Return if format has supported conversion
+bool hasSupportedConversion(int inFormat, int outFormat);
+
 // int operation    - resizing operation
 // Return if operation is supported
 bool isSupportedOperation(int operation);
@@ -25,6 +30,13 @@ bool isSupportedFormat(int format);
 // int outFormat    - pixel format of the target data
 // Return the temporary scale pixel format
 int getTempScaleFormat(int inFormat, int outFormat);
+
+// int width        - width of the image
+// int height       - height of the image
+// int pixelFormat  - pixel format of the image
+// int* &bufferSize - buffer to hold image channel sizes
+// Return the temporary scale pixel format
+void getPixelFormatChannelSizes(int width, int height, int pixelFormat, int* &bufferSize);
 
 // int operation    - value to be clamped
 // Return the value of the pixel support depending of the operation
