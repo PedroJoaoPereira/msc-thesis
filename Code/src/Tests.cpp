@@ -21,7 +21,7 @@ string pixelFormatToString(int format){
         case AV_PIX_FMT_V210:
             return "V210";
         case AV_PIX_FMT_YUV422PNORM:
-            return "YUV422P";
+            return "YUV422PNORM";
     }
 
     // Insuccess

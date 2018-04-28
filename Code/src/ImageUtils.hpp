@@ -2,7 +2,7 @@
 
 // Free the 2d buffer resources
 template <class DataType>
-void free2dBuffer(DataType** &buffer, int bufferSize){
+void free2dBufferAuxDEPRECATED(DataType** &buffer, int bufferSize){
     // Free nested buffers first
     for(int i = 0; i < bufferSize; i++)
         free(buffer[i]);
@@ -13,7 +13,7 @@ void free2dBuffer(DataType** &buffer, int bufferSize){
 
 // Limit a value to a defined interval
 template <class PrecisionType>
-void clamp(PrecisionType &val, PrecisionType min, PrecisionType max){
+void clampDEPRECATED(PrecisionType &val, PrecisionType min, PrecisionType max){
     if(val < min)
         val = min;
     else if(val > max)
@@ -22,23 +22,23 @@ void clamp(PrecisionType &val, PrecisionType min, PrecisionType max){
 
 // Convert a floating point value to fixed point
 template <class DataType, class PrecisionType>
-DataType roundTo(PrecisionType value){
+DataType roundToDEPRECATED(PrecisionType value){
     return static_cast<DataType>(value + static_cast<PrecisionType>(0.5) - (value < static_cast<PrecisionType>(0.)));
 }
 
 // Return coefficient function calculator
 template <class PrecisionType>
-PrecisionType(*getCoefMethod(int operation))(PrecisionType){
+PrecisionType(*getCoefMethodAuxDEPRECATED(int operation))(PrecisionType){
     // Resize operation with different kernels
     switch(operation){
     case SWS_POINT:
-        return &NearestNeighborCoefficient<PrecisionType>;
+        return &NearestNeighborCoefficientDEPRECATED<PrecisionType>;
     case SWS_BILINEAR:
-        return &BilinearCoefficient<PrecisionType>;
+        return &BilinearCoefficientDEPRECATED<PrecisionType>;
     case SWS_BICUBIC:
-        return &MitchellCoefficient<PrecisionType>;
+        return &MitchellCoefficientDEPRECATED<PrecisionType>;
     case SWS_LANCZOS:
-        return &LanczosCoefficient<PrecisionType>;
+        return &LanczosCoefficientDEPRECATED<PrecisionType>;
     }
 
     // Insuccess
@@ -47,7 +47,7 @@ PrecisionType(*getCoefMethod(int operation))(PrecisionType){
 
 // Calculate nearest neighbor interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType NearestNeighborCoefficient(PrecisionType val){
+PrecisionType NearestNeighborCoefficientDEPRECATED(PrecisionType val){
     // Calculate absolute value to zero
     PrecisionType valAbs = abs(val);
 
@@ -60,7 +60,7 @@ PrecisionType NearestNeighborCoefficient(PrecisionType val){
 
 // Calculate bilinear interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType BilinearCoefficient(PrecisionType val){
+PrecisionType BilinearCoefficientDEPRECATED(PrecisionType val){
     // Calculate absolute value to zero
     PrecisionType valAbs = abs(val);
 
@@ -73,7 +73,7 @@ PrecisionType BilinearCoefficient(PrecisionType val){
 
 // Calculate Mitchell interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType MitchellCoefficient(PrecisionType val){
+PrecisionType MitchellCoefficientDEPRECATED(PrecisionType val){
     // Calculate absolute value to zero
     PrecisionType valAbs = abs(val);
 
@@ -104,7 +104,7 @@ PrecisionType MitchellCoefficient(PrecisionType val){
 
 // Calculate Lanczos interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType LanczosCoefficient(PrecisionType val){
+PrecisionType LanczosCoefficientDEPRECATED(PrecisionType val){
     // Calculate absolute value to zero
     PrecisionType valAbs = abs(val);
 

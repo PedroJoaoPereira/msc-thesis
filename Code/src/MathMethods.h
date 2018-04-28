@@ -6,6 +6,11 @@
 // Return least common multiple of two integers
 int lcm(int num1, int num2);
 
+// int num1 - first value
+// int num2 - second value
+// Return the minimum number of two values
+int min(int num1, int num2);
+
 // int num1 - integer value
 // int num2 - integer value
 // Return the nearest value of num2 that is a divisor of num1
@@ -15,21 +20,10 @@ int greatestDivisor(int num1, int num2);
 // Fast round a value
 int roundFast(double value);
 
-// TEMPLATES
-
-// PrecisionType num1   - first value
-// PrecisionType num2   - second value
-// Return the minimum number of two values
-template <class PrecisionType>
-PrecisionType min(PrecisionType num1, PrecisionType num2);
-
-// PrecisionType num1   - first value
-// PrecisionType num2   - second value
-// Return the maximum number of two values
-template <class PrecisionType>
-PrecisionType max(PrecisionType num1, PrecisionType num2);
-
-// Include template methods implementations
-#include "MathMethods.hpp"
+// double* val  - value to be clamped
+// double min   - minimum limit of clamping
+// double max   - maximum limit of clamping
+// Clamp a value to a defined interval
+void clamp(double &val, double min, double max);
 
 #endif

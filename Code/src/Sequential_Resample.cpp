@@ -1,39 +1,19 @@
 #include "Sequential_Resample.h"
 
 // Convert the pixel format of the image
-template <class PrecisionType>
-int sequential_formatConversion(int width, int height,
-    int srcPixelFormat, uint8_t* srcSlice[],
-    int dstPixelFormat, uint8_t* dstSlice[]){
+void sequential_formatConversion(int width, int height, int srcPixelFormat, uint8_t* srcSlice[], int dstPixelFormat, uint8_t* dstSlice[]){
+    #pragma region UYVY422
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
 
-    // If same formats no need to resample
-    if(srcPixelFormat == dstPixelFormat){
-        // Copy data between buffers
-        if(srcPixelFormat == AV_PIX_FMT_V210){
-            memcpy(dstSlice[0], srcSlice[0], ((width + 47) / 48) * 128 * height);
-        } else if(srcPixelFormat == AV_PIX_FMT_UYVY422){
-            memcpy(dstSlice[0], srcSlice[0], width * 2 * height);
-        } else{
-            // Chroma size discovery
-            float widthPerc = 1.f;
-            float heightPerc = 1.f;
-            if(srcPixelFormat == AV_PIX_FMT_YUV422P ||
-                srcPixelFormat == AV_PIX_FMT_YUV420P ||
-                srcPixelFormat == AV_PIX_FMT_YUV422PNORM)
-                widthPerc = 0.5f;
-            if(srcPixelFormat == AV_PIX_FMT_YUV420P)
-                heightPerc = 0.5f;
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideUYVY422 * hStrideUYVY422);
 
-            memcpy(dstSlice[0], srcSlice[0], width * height);
-            memcpy(dstSlice[1], srcSlice[1], width * height * widthPerc * heightPerc);
-            memcpy(dstSlice[2], srcSlice[2], width * height * widthPerc * heightPerc);
-        }
-
-        // Success
-        return 0;
+        return;
     }
 
-    #pragma region UYVY422
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
         // Used metrics
         int vStrideUYVY422 = height;
@@ -43,7 +23,6 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcB = srcSlice[0];
-
         auto dstB = dstSlice[0];
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
@@ -58,8 +37,7 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
@@ -72,10 +50,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcB = srcSlice[0];
         auto srcBb = srcB + hStrideUYVY422;
-
         auto dstB = dstSlice[0];
         auto dstBb = dstB + hStrideYUV420P;
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
 
@@ -115,8 +91,7 @@ int sequential_formatConversion(int width, int height,
             dstBb += hStrideYUV420P;
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
@@ -129,10 +104,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcB = srcSlice[0];
         auto srcBb = srcB + hStrideUYVY422;
-
         auto dstB = dstSlice[0];
         auto dstBb = dstB + hStrideNV12;
-
         auto dstC = dstSlice[1];
 
         // Iterate blocks of 2x4 channel points
@@ -170,8 +143,8 @@ int sequential_formatConversion(int width, int height,
             dstB = dstBb;
             dstBb += hStrideNV12;
         }
-        // Success
-        return 0;
+
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210){
@@ -183,7 +156,6 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcB = srcSlice[0];
-
         auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
 
         // Iterate blocks of 1x12 channel points
@@ -213,8 +185,7 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
     #pragma endregion
 
@@ -228,10 +199,9 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcB = srcSlice[0];
+        auto dstB = dstSlice[0];
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
-
-        auto dstB = dstSlice[0];
 
         // Iterate blocks of 1x2 channel points
         for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
@@ -243,8 +213,20 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
+        memcpy(dstSlice[1], srcSlice[1], vStrideYUV422P * hStrideYUV422P / 2);
+        memcpy(dstSlice[2], srcSlice[2], vStrideYUV422P * hStrideYUV422P / 2);
+
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P){
@@ -259,10 +241,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
-
         auto srcUb = srcU + hStrideYUV422PChroma;
         auto srcVb = srcV + hStrideYUV422PChroma;
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
 
@@ -293,8 +273,7 @@ int sequential_formatConversion(int width, int height,
             srcVb += hStrideYUV422PChroma;
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12){
@@ -309,10 +288,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
-
         auto srcUb = srcU + hStrideYUV422PChroma;
         auto srcVb = srcV + hStrideYUV422PChroma;
-
         auto dstC = dstSlice[1];
 
         // Luma plane is the same
@@ -342,8 +319,7 @@ int sequential_formatConversion(int width, int height,
             srcVb += hStrideYUV422PChroma;
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210){
@@ -355,9 +331,7 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcB = srcSlice[0];
-
         auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
-
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
 
@@ -388,8 +362,7 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
     #pragma endregion
 
@@ -404,12 +377,10 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcB = srcSlice[0];
         auto srcBb = srcB + hStrideYUV420P;
-
-        auto srcU = srcSlice[1];
-        auto srcV = srcSlice[2];
-
         auto dstB = dstSlice[0];
         auto dstBb = dstB + hStrideUYVY422;
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
 
         // Iterate blocks of 2x2 channel points
         for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
@@ -439,8 +410,7 @@ int sequential_formatConversion(int width, int height,
             dstBb += hStrideUYVY422;
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV422P){
@@ -455,10 +425,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
-
         auto dstUb = dstU + hStrideYUV422PChroma;
         auto dstVb = dstV + hStrideYUV422PChroma;
 
@@ -488,8 +456,20 @@ int sequential_formatConversion(int width, int height,
             dstVb += hStrideYUV422PChroma;
         }
 
-        // Success
-        return 0;
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+        memcpy(dstSlice[1], srcSlice[1], vStrideYUV420P * hStrideYUV420P / 4);
+        memcpy(dstSlice[2], srcSlice[2], vStrideYUV420P * hStrideYUV420P / 4);
+
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_NV12){
@@ -502,7 +482,6 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
-
         auto dstC = dstSlice[1];
 
         // Luma plane is the same
@@ -516,8 +495,7 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_V210){
@@ -528,12 +506,10 @@ int sequential_formatConversion(int width, int height,
         int hStrideV210 = width / 6 * 4;
 
         // Discover buffer pointers
-        auto srcY = srcSlice[0];
-        auto srcYb = srcY + hStrideYUV420P;
-
+        auto srcB = srcSlice[0];
+        auto srcBb = srcB + hStrideYUV420P;
         auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
         auto dstBb = dstB + hStrideV210;
-
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
 
@@ -541,20 +517,20 @@ int sequential_formatConversion(int width, int height,
         for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
             for(int hIndex = 0; hIndex < hStrideYUV420P / 6; hIndex++){
                 // Get lumas from above line
-                auto y0 = *srcY++ << 2U;
-                auto y1 = *srcY++ << 2U;
-                auto y2 = *srcY++ << 2U;
-                auto y3 = *srcY++ << 2U;
-                auto y4 = *srcY++ << 2U;
-                auto y5 = *srcY++ << 2U;
+                auto y0 = *srcB++ << 2U;
+                auto y1 = *srcB++ << 2U;
+                auto y2 = *srcB++ << 2U;
+                auto y3 = *srcB++ << 2U;
+                auto y4 = *srcB++ << 2U;
+                auto y5 = *srcB++ << 2U;
 
                 // Get lumas from below line
-                auto y0b = *srcYb++ << 2U;
-                auto y1b = *srcYb++ << 2U;
-                auto y2b = *srcYb++ << 2U;
-                auto y3b = *srcYb++ << 2U;
-                auto y4b = *srcYb++ << 2U;
-                auto y5b = *srcYb++ << 2U;
+                auto y0b = *srcBb++ << 2U;
+                auto y1b = *srcBb++ << 2U;
+                auto y2b = *srcBb++ << 2U;
+                auto y3b = *srcBb++ << 2U;
+                auto y4b = *srcBb++ << 2U;
+                auto y5b = *srcBb++ << 2U;
 
                 // Get chroma U
                 auto u0 = *srcU++ << 2U;
@@ -580,15 +556,14 @@ int sequential_formatConversion(int width, int height,
             }
 
             // At the end of each line of block 2x2 corrects pointers
-            srcY = srcYb;
-            srcYb += hStrideYUV420P;
+            srcB = srcBb;
+            srcBb += hStrideYUV420P;
 
             dstB = dstBb;
             dstBb += hStrideV210;
         }
 
-        // Success
-        return 0;
+        return;
     }
     #pragma endregion
 
@@ -603,11 +578,9 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcB = srcSlice[0];
         auto srcBb = srcB + hStrideNV12;
-
-        auto srcC = srcSlice[1];
-
         auto dstB = dstSlice[0];
         auto dstBb = dstB + hStrideUYVY422;
+        auto srcC = srcSlice[1];
 
         // Iterate blocks of 2x2 channel points
         for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
@@ -637,8 +610,7 @@ int sequential_formatConversion(int width, int height,
             dstBb += hStrideUYVY422;
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV422P){
@@ -652,10 +624,8 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcC = srcSlice[1];
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
-
         auto dstUb = dstU + hStrideYUV422PChroma;
         auto dstVb = dstV + hStrideYUV422PChroma;
 
@@ -685,8 +655,7 @@ int sequential_formatConversion(int width, int height,
             dstVb += hStrideYUV422PChroma;
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV420P){
@@ -698,7 +667,6 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcC = srcSlice[1];
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
 
@@ -713,8 +681,19 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+        memcpy(dstSlice[1], srcSlice[1], vStrideNV12 * hStrideNV12 / 2);
+
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_V210){
@@ -727,10 +706,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcB = srcSlice[0];
         auto srcBb = srcB + hStrideNV12;
-
         auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
         auto dstBb = dstB + hStrideV210;
-
         auto srcC = srcSlice[1];
 
         // Iterate blocks of 2x2 channel points
@@ -758,7 +735,7 @@ int sequential_formatConversion(int width, int height,
                 auto u1 = *srcC++ << 2U;
                 auto v1 = *srcC++ << 2U;
                 auto u2 = *srcC++ << 2U;
-                auto v2 = *srcC++ << 2U;                
+                auto v2 = *srcC++ << 2U;
 
                 // Assign above line
                 *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
@@ -781,8 +758,7 @@ int sequential_formatConversion(int width, int height,
             dstBb += hStrideV210;
         }
 
-        // Success
-        return 0;
+        return;
     }
     #pragma endregion
 
@@ -791,12 +767,11 @@ int sequential_formatConversion(int width, int height,
         // Used metrics
         int vStrideV210 = height;
         int hStrideV210 = width / 6 * 4;
-        int vStrideNV12 = height;
-        int hStrideNV12 = width;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
 
         // Discover buffer pointers
         auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
-
         auto dstB = dstSlice[0];
 
         // Iterate blocks of 1x4 channel points
@@ -839,8 +814,7 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422P){
@@ -852,9 +826,7 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
-
         auto dstB = dstSlice[0];
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
 
@@ -898,8 +870,7 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV420P){
@@ -912,10 +883,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
         auto srcBb = srcB + hStrideV210;
-
         auto dstB = dstSlice[0];
         auto dstBb = dstB + hStrideYUV420P;
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
 
@@ -998,8 +967,7 @@ int sequential_formatConversion(int width, int height,
             dstBb += hStrideYUV420P;
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_NV12){
@@ -1012,10 +980,8 @@ int sequential_formatConversion(int width, int height,
         // Discover buffer pointers
         auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
         auto srcBb = srcB + hStrideV210;
-
         auto dstB = dstSlice[0];
         auto dstBb = dstB + hStrideNV12;
-
         auto dstC = dstSlice[1];
 
         // Iterate blocks of 2x4 channel points
@@ -1096,8 +1062,18 @@ int sequential_formatConversion(int width, int height,
             dstBb += hStrideNV12;
         }
 
-        // Success
-        return 0;
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_V210){
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideV210 * hStrideV210 * sizeof(uint32_t));
+
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422PNORM){
@@ -1109,9 +1085,7 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
-
         auto dstB = dstSlice[0];
-
         auto dstU = dstSlice[1];
         auto dstV = dstSlice[2];
 
@@ -1123,24 +1097,24 @@ int sequential_formatConversion(int width, int height,
         // Iterate blocks of 1x4 channel points
         for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
             for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
-                auto u0 = (*srcB >> 2U) & 0xFF; // U0
-                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
-                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                auto u0 = *srcB & 0x3FF; // U0
+                auto y0 = (*srcB >> 10U) & 0x3FF; // Y0
+                auto v0 = (*srcB >> 20U) & 0x3FF; // V0
                 *srcB++;
 
-                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
-                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
-                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                auto y1 = *srcB & 0x3FF; // Y1
+                auto u1 = (*srcB >> 10U) & 0x3FF; // U1
+                auto y2 = (*srcB >> 20U) & 0x3FF; // Y2
                 *srcB++;
 
-                auto v1 = (*srcB >> 2U) & 0xFF; // V1
-                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
-                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                auto v1 = *srcB & 0x3FF; // V1
+                auto y3 = (*srcB >> 10U) & 0x3FF; // Y3
+                auto u2 = (*srcB >> 20U) & 0x3FF; // U2
                 *srcB++;
 
-                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
-                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
-                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                auto y4 = *srcB & 0x3FF; // Y4
+                auto v2 = (*srcB >> 10U) & 0x3FF; // V2
+                auto y5 = (*srcB >> 20U) & 0x3FF; // Y5
                 *srcB++;
 
                 *dstU++ = uint8_t(roundFast(static_cast<double>(u0) * constChroma + const16));
@@ -1160,8 +1134,7 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
     #pragma endregion
 
@@ -1175,9 +1148,7 @@ int sequential_formatConversion(int width, int height,
 
         // Discover buffer pointers
         auto srcB = srcSlice[0];
-
         auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
-
         auto srcU = srcSlice[1];
         auto srcV = srcSlice[2];
 
@@ -1190,20 +1161,20 @@ int sequential_formatConversion(int width, int height,
         for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
             for(int hIndex = 0; hIndex < hStrideYUV422P / 6; hIndex++){
                 // Get components from source
-                auto u0n = *srcU++ << 2U; // U0
-                auto y0n = *srcB++ << 2U; // Y0
-                auto v0n = *srcV++ << 2U; // V0
-                auto y1n = *srcB++ << 2U; // Y1
+                auto u0n = *srcU++; // U0
+                auto y0n = *srcB++; // Y0
+                auto v0n = *srcV++; // V0
+                auto y1n = *srcB++; // Y1
 
-                auto u1n = *srcU++ << 2U; // U1
-                auto y2n = *srcB++ << 2U; // Y2
-                auto v1n = *srcV++ << 2U; // V1
-                auto y3n = *srcB++ << 2U; // Y3
+                auto u1n = *srcU++; // U1
+                auto y2n = *srcB++; // Y2
+                auto v1n = *srcV++; // V1
+                auto y3n = *srcB++; // Y3
 
-                auto u2n = *srcU++ << 2U; // U2
-                auto y4n = *srcB++ << 2U; // Y4
-                auto v2n = *srcV++ << 2U; // V2
-                auto y5n = *srcB++ << 2U; // Y5
+                auto u2n = *srcU++; // U2
+                auto y4n = *srcB++; // Y4
+                auto v2n = *srcV++; // V2
+                auto y5n = *srcB++; // Y5
 
                 // Denormalize values
                 auto v0 = uint16_t(roundFast((static_cast<double>(v0n) - const16) * constChroma)) & 0x3FF;
@@ -1229,36 +1200,29 @@ int sequential_formatConversion(int width, int height,
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
     #pragma endregion
-
-    // No conversion was supported
-    return -1;
 }
 
 // Precalculate coefficients
-template <class PrecisionType>
-int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
-    int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType* &preCalculatedCoefs){
-
+int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, double(*coefFunc)(double), double* &preCalculatedCoefs){
     // Calculate size ratio
-    PrecisionType sizeRatio = static_cast<PrecisionType>(dstSize) / static_cast<PrecisionType>(srcSize);
+    double sizeRatio = static_cast<double>(dstSize) / static_cast<double>(srcSize);
 
     // Calculate once
-    PrecisionType pixelSupportDiv2 = pixelSupport / static_cast<PrecisionType>(2.);
-    bool isDownScale = sizeRatio < static_cast<PrecisionType>(1.);
-    PrecisionType regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
-    PrecisionType filterStep = isDownScale && operation != SWS_POINT ? static_cast<PrecisionType>(1.) / sizeRatio : static_cast<PrecisionType>(1.);
+    double pixelSupportDiv2 = pixelSupport / 2.;
+    bool isDownScale = sizeRatio < 1.;
+    double regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
+    double filterStep = isDownScale && operation != SWS_POINT ? 1. / sizeRatio : 1.;
     int numCoefficients = isDownScale ? ceil(pixelSupport / sizeRatio) : pixelSupport;
     int numCoefficientsDiv2 = numCoefficients / 2;
 
     // Calculate number of lines of coefficients
-    int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min<int>(srcSize, dstSize);
+    int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min(srcSize, dstSize);
 
     // Initialize array
-    preCalculatedCoefs = static_cast<PrecisionType*>(malloc(preCalcCoefSize * numCoefficients * sizeof(PrecisionType)));
+    preCalculatedCoefs = static_cast<double*>(malloc(preCalcCoefSize * numCoefficients * sizeof(double)));
 
     // For each necessary line of coefficients
     for(int col = 0; col < preCalcCoefSize; col++){
@@ -1266,23 +1230,23 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
         int indexOffset = col * numCoefficients;
 
         // Original line index coordinate
-        PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(.5)) / sizeRatio;
+        double colOriginal = (static_cast<double>(col) + .5) / sizeRatio;
 
         // Discover source limit pixels
-        PrecisionType nearPixel = colOriginal - filterStep;
-        PrecisionType leftPixel = colOriginal - regionRadius;
+        double nearPixel = colOriginal - filterStep;
+        double leftPixel = colOriginal - regionRadius;
 
         // Discover offset to pixel of filter start
-        PrecisionType offset = round(leftPixel) + static_cast<PrecisionType>(.5) - leftPixel;
+        double offset = round(leftPixel) + .5 - leftPixel;
         // Calculate maximum distance to normalize distances
-        PrecisionType maxDistance = colOriginal - nearPixel;
+        double maxDistance = colOriginal - nearPixel;
         // Calculate where filtering will start
-        PrecisionType startPosition = leftPixel + offset;
+        double startPosition = leftPixel + offset;
 
         // Calculate coefficients
-        PrecisionType coefAcc = static_cast<PrecisionType>(0.);
+        double coefAcc = 0.;
         for(int index = 0; index < numCoefficients; index++){
-            PrecisionType coefHolder = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
+            double coefHolder = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
             coefAcc += coefHolder;
             preCalculatedCoefs[indexOffset + index] = coefHolder;
         }
@@ -1291,12 +1255,12 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
         if(operation == SWS_POINT){
             if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == preCalculatedCoefs[indexOffset + numCoefficientsDiv2]){
                 if(isDownScale){
-                    if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == static_cast<PrecisionType>(0.) && numCoefficients % 2 != 0)
-                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] = static_cast<PrecisionType>(1.);
+                    if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == 0. && numCoefficients % 2 != 0)
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] = 1.;
                     else
-                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.;
                 } else
-                    preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
+                    preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.;
             }
         }
 
@@ -1311,23 +1275,21 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
 }
 
 // Change the image dimension
-template <class PrecisionType>
 void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
     int dstWidth, int dstHeight, uint8_t* dstData,
-    int operation, int pixelSupport,
-    int vCoefsSize, PrecisionType* &vCoefs, int hCoefsSize, PrecisionType* &hCoefs,
-    int colorChannel){
+    int operation, int pixelSupport, int colorChannel,
+    int vCoefsSize, double* &vCoefs, int hCoefsSize, double* &hCoefs){
 
     // Get scale ratios
-    PrecisionType scaleHeightRatio = static_cast<PrecisionType>(dstHeight) / static_cast<PrecisionType>(srcHeight);
-    PrecisionType scaleWidthRatio = static_cast<PrecisionType>(dstWidth) / static_cast<PrecisionType>(srcWidth);
+    double scaleHeightRatio = static_cast<double>(dstHeight) / static_cast<double>(srcHeight);
+    double scaleWidthRatio = static_cast<double>(dstWidth) / static_cast<double>(srcWidth);
 
     // Calculate once
-    PrecisionType pixelSupportDiv2 = pixelSupport / static_cast<PrecisionType>(2.);
-    bool isDownScaleV = scaleHeightRatio < static_cast<PrecisionType>(1.);
-    bool isDownScaleH = scaleWidthRatio < static_cast<PrecisionType>(1.);
-    PrecisionType regionVRadius = isDownScaleV ? pixelSupportDiv2 / scaleHeightRatio : pixelSupportDiv2;
-    PrecisionType regionHRadius = isDownScaleH ? pixelSupportDiv2 / scaleWidthRatio : pixelSupportDiv2;
+    double pixelSupportDiv2 = pixelSupport / 2.;
+    bool isDownScaleV = scaleHeightRatio < 1.;
+    bool isDownScaleH = scaleWidthRatio < 1.;
+    double regionVRadius = isDownScaleV ? pixelSupportDiv2 / scaleHeightRatio : pixelSupportDiv2;
+    double regionHRadius = isDownScaleH ? pixelSupportDiv2 / scaleWidthRatio : pixelSupportDiv2;
     int numVCoefs = isDownScaleV ? ceil(pixelSupport / scaleHeightRatio) : pixelSupport;
     int numHCoefs = isDownScaleH ? ceil(pixelSupport / scaleWidthRatio) : pixelSupport;
 
@@ -1339,15 +1301,15 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
         int indexLinOffset = (lin % vCoefsSize) * numVCoefs;
 
         // Original line index coordinate
-        PrecisionType linOriginal = (static_cast<PrecisionType>(lin) + static_cast<PrecisionType>(.5)) / scaleHeightRatio;
+        double linOriginal = (static_cast<double>(lin) + .5) / scaleHeightRatio;
 
         // Discover source limit pixels
-        PrecisionType upperPixel = linOriginal - regionVRadius;
+        double upperPixel = linOriginal - regionVRadius;
         // Discover offset to pixel of filter start
-        PrecisionType offsetV = round(upperPixel) + static_cast<PrecisionType>(.5) - upperPixel;
+        double offsetV = round(upperPixel) + .5 - upperPixel;
 
         // Calculate once
-        PrecisionType startLinPosition = upperPixel + offsetV;
+        double startLinPosition = upperPixel + offsetV;
 
         // Iterate through each column of the scaled image
         for(int col = 0; col < dstWidth; col++){
@@ -1355,55 +1317,51 @@ void sequential_resize(int srcWidth, int srcHeight, uint8_t* srcData,
             int indexColOffset = (col % hCoefsSize) * numHCoefs;
 
             // Original line index coordinate
-            PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(.5)) / scaleWidthRatio;
+            double colOriginal = (static_cast<double>(col) + .5) / scaleWidthRatio;
 
             // Discover source limit pixels
-            PrecisionType leftPixel = colOriginal - regionHRadius;
+            double leftPixel = colOriginal - regionHRadius;
             // Discover offset to pixel of filter start
-            PrecisionType offsetH = round(leftPixel) + static_cast<PrecisionType>(.5) - leftPixel;
+            double offsetH = round(leftPixel) + .5 - leftPixel;
 
             // Calculate once
-            PrecisionType startColPosition = leftPixel + offsetH;
+            double startColPosition = leftPixel + offsetH;
 
             // Temporary variables used in the interpolation
-            PrecisionType result = static_cast<PrecisionType>(0.);
+            double result = 0.;
             // Calculate resulting color from coefficients
             for(int indexV = 0; indexV < numVCoefs; indexV++){
                 // Access once the memory
-                PrecisionType vCoef = vCoefs[indexLinOffset + indexV];
+                double vCoef = vCoefs[indexLinOffset + indexV];
 
                 for(int indexH = 0; indexH < numHCoefs; indexH++){
                     // Access once the memory
-                    PrecisionType hCoef = hCoefs[indexColOffset + indexH];
+                    double hCoef = hCoefs[indexColOffset + indexH];
 
                     // Get pixel from source data
                     uint8_t colorHolder = getPixel(startLinPosition + indexV, startColPosition + indexH, srcWidth, srcHeight, srcData);
 
                     // Calculate pixel color weight
-                    PrecisionType weight = vCoef * hCoef;
+                    double weight = vCoef * hCoef;
 
                     // Weights neighboring pixel and add it to the result
-                    result += static_cast<PrecisionType>(colorHolder) * weight;
+                    result += static_cast<double>(colorHolder) * weight;
                 }
             }
 
             // Clamp value to avoid undershooting and overshooting
             if(colorChannel == 0)
-                clamp<PrecisionType>(result, static_cast<PrecisionType>(16.), static_cast<PrecisionType>(235.));
+                clamp(result, 16., 235.);
             else
-                clamp<PrecisionType>(result, static_cast<PrecisionType>(16.), static_cast<PrecisionType>(240.));
+                clamp(result, 16., 240.);
             // Assign calculated color to destiantion data
-            dstData[targetLine + col] = roundTo<uint8_t, PrecisionType>(result);
+            dstData[targetLine + col] = uint8_t(roundFast(result));
         }
     }
 }
 
 // Prepares the resample operation
-template <class PrecisionType>
-int sequential_resample_aux(AVFrame* src, AVFrame* dst, int operation){
-    // Return value of this method
-    int returnValue = 0;
-
+void sequential_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     // Access once
     int srcWidth = src->width, srcHeight = src->height;
     int srcFormat = src->format;
@@ -1412,94 +1370,73 @@ int sequential_resample_aux(AVFrame* src, AVFrame* dst, int operation){
 
     // Check if is only a format conversion
     bool isOnlyFormatConversion = srcWidth == dstWidth && srcHeight == dstHeight;
-
-    // Initialize needed variables if it is a scaling operation
-    int scalingSupportedFormat = getTempScaleFormat(srcFormat, dstFormat);
-
-    // Temporary buffers used in intermediate operations
-    uint8_t** formatConversionBuffer, **resizeBuffer;
-
-    // Last format conversion buffers
-    uint8_t** lastFormatConversionBuffer = src->data;
-    int lastFormatConversionPixelFormat = srcFormat;
-
-    // Rescaling operation branch
-    if(!isOnlyFormatConversion){
-        // Allocate temporary buffers
-        allocBuffers(formatConversionBuffer, srcWidth, srcHeight, scalingSupportedFormat);
-        allocBuffers(resizeBuffer, dstWidth, dstHeight, scalingSupportedFormat);
-
-        // Resamples image to a supported format
-        if(sequential_formatConversion<PrecisionType>(srcWidth, srcHeight,
-            srcFormat, src->data,
-            scalingSupportedFormat, formatConversionBuffer) < 0){
-            returnValue = -1;
-            goto END;
-        }
-
-        // Needed resources for coefficients calculations
-        PrecisionType(*coefFunc)(PrecisionType) = getCoefMethod<PrecisionType>(operation);
-        int pixelSupport = getPixelSupport(operation);
-
-        // Variables for precalculated coefficients
-        PrecisionType* vCoefs;
-        int vCoefsSize = sequential_preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
-        PrecisionType* hCoefs;
-        int hCoefsSize = sequential_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
-
-        // Chroma size discovery
-        float widthPerc = 1.f;
-        float heightPerc = 1.f;
-        if(scalingSupportedFormat == AV_PIX_FMT_YUV422P ||
-            scalingSupportedFormat == AV_PIX_FMT_YUV420P ||
-            scalingSupportedFormat == AV_PIX_FMT_YUV422PNORM)
-            widthPerc = 0.5f;
-        if(scalingSupportedFormat == AV_PIX_FMT_YUV420P)
-            heightPerc = 0.5f;
-
-        // Apply the resizing operation to luma channel
-        sequential_resize<PrecisionType>(srcWidth, srcHeight, formatConversionBuffer[0],
-            dstWidth, dstHeight, resizeBuffer[0], operation,
-            pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, 0);
-
-        // Apply the resizing operation to chroma channels
-        int srcWidthChroma = static_cast<int>(srcWidth * widthPerc);
-        int srcHeightChroma = static_cast<int>(srcHeight * heightPerc);
-        int dstWidthChroma = static_cast<int>(dstWidth * widthPerc);
-        int dstHeightChroma = static_cast<int>(dstHeight * heightPerc);
-        for(int colorChannel = 1; colorChannel < 3; colorChannel++){
-            sequential_resize<PrecisionType>(srcWidthChroma, srcHeightChroma, formatConversionBuffer[colorChannel],
-                dstWidthChroma, dstHeightChroma, resizeBuffer[colorChannel], operation,
-                pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, colorChannel);
-        }
-
-
-        // Assign correct values to apply last resample
-        lastFormatConversionBuffer = resizeBuffer;
-        lastFormatConversionPixelFormat = scalingSupportedFormat;
-
-        // Free used resources
-        free(vCoefs);
-        free(hCoefs);
+    // Changes image pixel format only
+    if(isOnlyFormatConversion){
+        // Format conversion operation
+        sequential_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
+        // End resample operation
+        return;
     }
 
-    // Resamples image to a target format
-    if(sequential_formatConversion<PrecisionType>(dstWidth, dstHeight,
-        lastFormatConversionPixelFormat, lastFormatConversionBuffer,
-        dstFormat, dst->data) < 0){
-        returnValue = -1;
-        goto END;
+    // Get standard supported pixel format in scaling
+    int scaleFormat = getScaleFormat(srcFormat, dstFormat);
+
+    // Needed resources for coefficients calculations
+    double(*coefFunc)(double) = getCoefMethod(operation);
+    int pixelSupport = getPixelSupport(operation);
+    // Precalculate coefficients
+    double* vCoefs;
+    int vCoefsSize = sequential_preCalculateCoefficients(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
+    double* hCoefs;
+    int hCoefsSize = sequential_preCalculateCoefficients(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
+
+    // Temporary buffer
+    uint8_t** formatConversionBuffer;
+    // Allocate temporary buffer
+    allocBuffers(formatConversionBuffer, srcWidth, srcHeight, scaleFormat);
+
+    // Resamples image to a supported format
+    sequential_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, formatConversionBuffer);
+
+    // Temporary buffer
+    uint8_t **resizeBuffer;
+    // Allocate temporary buffer
+    allocBuffers(resizeBuffer, dstWidth, dstHeight, scaleFormat);
+
+    // Chroma size discovery
+    double widthPerc = 1.;
+    double heightPerc = 1.;
+    if(scaleFormat == AV_PIX_FMT_YUV422P || scaleFormat == AV_PIX_FMT_YUV420P || scaleFormat == AV_PIX_FMT_YUV422PNORM)
+        widthPerc = .5;
+    if(scaleFormat == AV_PIX_FMT_YUV420P)
+        heightPerc = .5;
+
+    // Apply the resizing operation to luma channel
+    sequential_resize(srcWidth, srcHeight, formatConversionBuffer[0],
+        dstWidth, dstHeight, resizeBuffer[0], operation, pixelSupport, 0,
+        vCoefsSize, vCoefs, hCoefsSize, hCoefs);
+
+    // Apply the resizing operation to chroma channels
+    int srcWidthChroma = static_cast<int>(srcWidth * widthPerc);
+    int srcHeightChroma = static_cast<int>(srcHeight * heightPerc);
+    int dstWidthChroma = static_cast<int>(dstWidth * widthPerc);
+    int dstHeightChroma = static_cast<int>(dstHeight * heightPerc);
+    for(int colorChannel = 1; colorChannel < 3; colorChannel++){
+        sequential_resize(srcWidthChroma, srcHeightChroma, formatConversionBuffer[colorChannel],
+            dstWidthChroma, dstHeightChroma, resizeBuffer[colorChannel], operation, pixelSupport, colorChannel,
+            vCoefsSize, vCoefs, hCoefsSize, hCoefs);
     }
 
-    END:
     // Free used resources
-    if(!isOnlyFormatConversion){
-        free2dBuffer<uint8_t>(formatConversionBuffer, 3);
-        free2dBuffer<uint8_t>(resizeBuffer, 3);
-    }
+    free2dBuffer(formatConversionBuffer, 3);
+    free(vCoefs);
+    free(hCoefs);
 
-    // Return negative if insuccess
-    return returnValue;
+    // Resamples image to target format
+    sequential_formatConversion(dstWidth, dstHeight, scaleFormat, resizeBuffer, dstFormat, dst->data);
+
+    // Free used resources
+    free2dBuffer(resizeBuffer, 3);
 }
 
 // Wrapper for the sequential resample operation method
@@ -1560,13 +1497,7 @@ int sequential_resample(AVFrame* src, AVFrame* dst, int operation){
     initTime = high_resolution_clock::now();
 
     // Apply the scaling operation
-    if(sequential_resample_aux<double>(src, dst, operation) < 0){
-        // Display error
-        cerr << "[SEQUENTIAL] Operation could not be done (resample - conversion not supported)!" << endl;
-
-        // Insuccess
-        return -1;
-    }
+    sequential_resample_aux(src, dst, operation);
 
     // Stop counting operation execution time
     stopTime = high_resolution_clock::now();

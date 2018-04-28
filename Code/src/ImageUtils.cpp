@@ -2,6 +2,13 @@
 
 // Return if format has supported conversion
 bool hasSupportedConversion(int inFormat, int outFormat){
+    // Used only in DEBUG
+    if(inFormat == AV_PIX_FMT_V210 && outFormat == AV_PIX_FMT_YUV422PNORM)
+        return true;
+    if(inFormat == AV_PIX_FMT_YUV422PNORM && outFormat == AV_PIX_FMT_V210)
+        return true;
+
+
     // Verify if supported input format
     switch(inFormat){
     case AV_PIX_FMT_UYVY422:
@@ -105,7 +112,7 @@ bool isSupportedOperation(int operation){
 }
 
 // Return if format is supported
-bool isSupportedFormat(int format){
+bool isSupportedFormatDEPRECATED(int format){
     // Verify if supported format
     switch(format){
     case AV_PIX_FMT_UYVY422:
@@ -121,92 +128,6 @@ bool isSupportedFormat(int format){
     return false;
 }
 
-// Return the temporary scale pixel format
-int getTempScaleFormat(int inFormat, int outFormat){
-    // Retrieve normalized 8 bits format if scale will be done in 10 bits
-    if(inFormat == AV_PIX_FMT_V210 && outFormat == AV_PIX_FMT_V210)
-        return AV_PIX_FMT_YUV422PNORM;
-
-    // Retrieve the temporary scale format
-    switch(inFormat){
-    case AV_PIX_FMT_YUV422P:
-        return AV_PIX_FMT_YUV422P;
-    case AV_PIX_FMT_YUV420P:
-        return AV_PIX_FMT_YUV420P;
-    case AV_PIX_FMT_UYVY422:
-        return AV_PIX_FMT_YUV422P;
-    case AV_PIX_FMT_NV12:
-        return AV_PIX_FMT_YUV420P;
-    case AV_PIX_FMT_V210:
-        return AV_PIX_FMT_YUV422P;
-    }
-
-    // If the source pixel format is not supported
-    return AV_PIX_FMT_NONE;
-}
-
-// Return the temporary scale pixel format
-void getPixelFormatChannelSizes(int width, int height, int pixelFormat, int* &bufferSize){
-    // Allocate channel buffer size
-    bufferSize = static_cast<int*>(malloc(3 * sizeof(int)));
-
-    // Calculate once
-    int wxh = width * height;
-    int wxhDi2 = wxh / 2;
-    int wxhDi4 = wxh / 4;
-
-    // Calculate buffer sizes for each pixel format
-    switch(pixelFormat){
-    case AV_PIX_FMT_UYVY422:
-        bufferSize[0] = wxh * 2;
-        bufferSize[1] = 0;
-        bufferSize[2] = 0;
-        break;
-    case AV_PIX_FMT_YUV422P:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi2;
-        bufferSize[2] = wxhDi2;
-        break;
-    case AV_PIX_FMT_YUV422PNORM:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi2;
-        bufferSize[2] = wxhDi2;
-        break;
-    case AV_PIX_FMT_YUV420P:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi4;
-        bufferSize[2] = wxhDi4;
-        break;
-    case AV_PIX_FMT_NV12:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi2;
-        bufferSize[2] = 0;
-        break;
-    case AV_PIX_FMT_V210:
-        bufferSize[0] = height * 128 * ((width + 47) / 48);
-        bufferSize[1] = 0;
-        bufferSize[2] = 0;
-        break;
-    }
-}
-
-// Return the value of the pixel support depending of the operation
-int getPixelSupport(int operation){
-    // Resize operation with different kernels
-    switch(operation){
-    case SWS_POINT:
-        return 2;
-    case SWS_BILINEAR:
-        return 2;
-    case SWS_BICUBIC:
-        return 4;
-    case SWS_LANCZOS:
-        return 6;
-    }
-
-    // Insuccess
-    return -1;
-}
 
 // Allocate image channels data buffers depending of the pixel format
 void allocBuffers(uint8_t** &buffer, int width, int height, int pixelFormat){
@@ -254,13 +175,154 @@ void allocBuffers(uint8_t** &buffer, int width, int height, int pixelFormat){
     }
 }
 
+// Free the 2d buffer resources
+void free2dBuffer(uint8_t** &buffer, int bufferSize){
+    // Free nested buffers first
+    for(int i = 0; i < bufferSize; i++)
+        free(buffer[i]);
+
+    // Free main buffer
+    free(buffer);
+}
+
 // Get a valid pixel from the image
 uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data){
     // Clamp coords
-    clamp<int>(lin, 0, height - 1);
-    clamp<int>(col, 0, width - 1);
+    if(lin < 0)
+        lin = 0;
+    else if(lin > height - 1)
+        lin = height - 1;
+
+    // Clamp coords
+    if(col < 0)
+        col = 0;
+    else if(col > width - 1)
+        col = width - 1;
 
     // Assigns correct value to return
     return data[lin * width + col];
 }
 
+// Return the temporary scale pixel format
+int getScaleFormat(int inFormat, int outFormat){
+    // Retrieve normalized 8 bits format if scale will be done in 10 bits
+    if(inFormat == AV_PIX_FMT_V210 && outFormat == AV_PIX_FMT_V210)
+        return AV_PIX_FMT_YUV422PNORM;
+
+    // Retrieve the temporary scale format
+    switch(inFormat){
+    case AV_PIX_FMT_UYVY422:
+        return AV_PIX_FMT_YUV422P;
+    case AV_PIX_FMT_YUV422P:
+        return AV_PIX_FMT_YUV422P;
+    case AV_PIX_FMT_YUV420P:
+        return AV_PIX_FMT_YUV420P;
+    case AV_PIX_FMT_NV12:
+        return AV_PIX_FMT_YUV420P;
+    case AV_PIX_FMT_V210:
+        return AV_PIX_FMT_YUV422P;
+    }
+
+    // If the source pixel format is not supported
+    return AV_PIX_FMT_NONE;
+}
+
+// Return the value of the pixel support depending of the operation
+int getPixelSupport(int operation){
+    // Resize operation with different kernels
+    switch(operation){
+    case SWS_POINT:
+        return 2;
+    case SWS_BILINEAR:
+        return 2;
+    case SWS_BICUBIC:
+        return 4;
+    case SWS_LANCZOS:
+        return 6;
+    }
+
+    // Insuccess
+    return -1;
+}
+
+// Return coefficient function calculator
+double(*getCoefMethod(int operation))(double){
+    // Resize operation with different kernels
+    switch(operation){
+    case SWS_POINT:
+        return &NearestNeighborCoefficient;
+    case SWS_BILINEAR:
+        return &BilinearCoefficient;
+    case SWS_BICUBIC:
+        return &MitchellCoefficient;
+    case SWS_LANCZOS:
+        return &LanczosCoefficient;
+    }
+
+    // Insuccess
+    return nullptr;
+}
+
+// Calculate nearest neighbor interpolation coefficient from a distance
+double NearestNeighborCoefficient(double val){
+    // Calculate absolute value to zero
+    double valAbs = abs(val);
+
+    // Calculate coefficient
+    if(valAbs <= 0.499999)
+        return 1.;
+    else
+        return 0.;
+}
+
+// Calculate bilinear interpolation coefficient from a distance
+double BilinearCoefficient(double val){
+    // Calculate absolute value to zero
+    double valAbs = abs(val);
+
+    // Calculate coefficient
+    if(valAbs < 1.)
+        return 1. - valAbs;
+    else
+        return 0.;
+}
+
+// Calculate Mitchell interpolation coefficient from a distance
+double MitchellCoefficient(double val){
+    // Calculate absolute value to zero
+    double valAbs = abs(val);
+
+    // Configurable parameters
+    double B = 0.;
+    double C = .6;
+
+    // Calculate once
+    double val1div6 = 1. / 6.;
+
+    // Calculate coefficient
+    if(valAbs < 1.)
+        return val1div6 * ((6. - 2. * B) + valAbs * valAbs * ((12. * B + 6. * C - 18.) + valAbs * (12. - 9. * B - 6. * C)));
+    else if(valAbs < 2.)
+        return val1div6 * ((8. * B + 24. * C) + valAbs * ((-12. * B - 48. * C) + valAbs * ((6. * B + 30. * C) + valAbs * (-B - 6. * C))));
+    else
+        return 0.;
+}
+
+// Calculate Lanczos interpolation coefficient from a distance
+double LanczosCoefficient(double val){
+    // Calculate absolute value to zero
+    double valAbs = abs(val);
+
+    // Configurable parameters
+    double A = 3.;
+
+    // Calculate coefficient
+    if(valAbs < A){
+        // Calculate once
+        double xpi = val * M_PI;
+        double xapi = val / A * M_PI;
+
+        return sin(val * M_PI) * sin(val * M_PI / A) / (val * val * M_PI * M_PI / A);
+    } else
+        return 0.;
+}
