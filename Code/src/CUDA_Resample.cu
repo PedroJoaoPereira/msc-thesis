@@ -1,5 +1,8 @@
 #include "CUDA_Resample.h"
 
+// global declaration of 2D float texture (visible for host and device code)
+texture<uint8_t, cudaTextureType2D, cudaReadModeElementType> tex;
+
 // Allocate image channels data buffers depending of the pixel format
 void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height, int pixelFormat){
     // Allocate channel buffer size
@@ -80,13 +83,13 @@ void cudaCopyBuffersToGPU(uint8_t* srcBuffer[], uint8_t* gpuBuffer[], int* &buff
 // Copy data from device to host
 void cudaCopyBuffersFromGPU(uint8_t* targetBuffer[], uint8_t* gpuBuffer[], int* &bufferSize){
     // First channel
-    cudaMemcpyAsync(targetBuffer[0], gpuBuffer[0], bufferSize[0], cudaMemcpyDeviceToHost);
+    cudaMemcpy(targetBuffer[0], gpuBuffer[0], bufferSize[0], cudaMemcpyDeviceToHost);
 
     // Copy chroma channels if they exist
     if(bufferSize[1] != 0)
-        cudaMemcpyAsync(targetBuffer[1], gpuBuffer[1], bufferSize[1], cudaMemcpyDeviceToHost);
+        cudaMemcpy(targetBuffer[1], gpuBuffer[1], bufferSize[1], cudaMemcpyDeviceToHost);
     if(bufferSize[2] != 0)
-        cudaMemcpyAsync(targetBuffer[2], gpuBuffer[2], bufferSize[2], cudaMemcpyDeviceToHost);
+        cudaMemcpy(targetBuffer[2], gpuBuffer[2], bufferSize[2], cudaMemcpyDeviceToHost);
 }
 
 // Calculate launch parameters of format conversion kernel
@@ -170,7 +173,7 @@ pair<dim3, dim3> calculateConversionLP(int width, int height, int srcPixelFormat
 }
 
 // Calculate launch parameters of resize kernel
-pair<dim3, dim3> calculateResizeLP(int width, int height){
+pair<dim3, dim3> calculateResizeLP(int width, int height, int initDivisor){
     // Variable with result launch parameters
     pair<dim3, dim3> result;
 
@@ -178,8 +181,8 @@ pair<dim3, dim3> calculateResizeLP(int width, int height){
     result.first = dim3(width, height);
 
     // Calculate thread size
-    int hDivisor = greatestDivisor(result.first.x, 16);
-    int vDivisor = greatestDivisor(result.first.y, 16);
+    int hDivisor = greatestDivisor(result.first.x, initDivisor);
+    int vDivisor = greatestDivisor(result.first.y, initDivisor);
 
     // Assign thread size
     result.second = dim3(hDivisor, vDivisor);
@@ -194,26 +197,15 @@ pair<dim3, dim3> calculateResizeLP(int width, int height){
 // ------------------------------------------------------------------
 
 // Convert the pixel format of the image
-__global__ void cuda_formatConversion(int width, int height,
-    int srcPixelFormat, uint8_t* srcSlice0, uint8_t* srcSlice1, uint8_t* srcSlice2,
-    int dstPixelFormat, uint8_t* dstSlice0, uint8_t* dstSlice1, uint8_t* dstSlice2){
-
-    // Calculate pixel location
-    int lin = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
+void cuda_omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* srcSlice[], int dstPixelFormat, uint8_t* dstSlice[]){
     #pragma region UYVY422
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Used metrics
         int vStrideUYVY422 = height;
         int hStrideUYVY422 = width * 2;
 
-        // Calculate buffer pointers
-        auto srcB = srcSlice0 + lin * hStrideUYVY422 + col;
-        auto dstB = dstSlice0 + lin * hStrideUYVY422 + col;
-
-        // Assign data
-        *dstB = *srcB;
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideUYVY422 * hStrideUYVY422);
 
         return;
     }
@@ -225,17 +217,22 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV422P = height;
         int hStrideYUV422P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * hStrideUYVY422 + col * 4;
-        auto dstB = dstSlice0 + lin * hStrideYUV422P + col * 2;
-        auto dstU = dstSlice1 + lin * hStrideYUV422P / 2 + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV422P / 2 + col;
+        // Iterate blocks of 1x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV422P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV422P / 2;
 
-        // Assign values
-        *dstU++ = *srcB++; // U0
-        *dstB++ = *srcB++; // Y0
-        *dstV++ = *srcB++; // V0
-        *dstB++ = *srcB++; // Y1
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                *dstU++ = *srcB++; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstV++ = *srcB++; // V0
+                *dstB++ = *srcB++; // Y1
+            }
+        }
 
         return;
     }
@@ -247,37 +244,43 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV420P = height;
         int hStrideYUV420P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideUYVY422 + col * 4;
-        auto srcBb = srcB + hStrideUYVY422;
-        auto dstB = dstSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto dstBb = dstB + hStrideYUV420P;
-        auto dstU = dstSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV420P / 2 + col;
+        // Iterate blocks of 2x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422 * 2;
+            auto srcBb = srcB + hStrideUYVY422;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV420P * 2;
+            auto dstBb = dstB + hStrideYUV420P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
 
-        // Get above line
-        uint8_t u0 = *srcB++; // U0
-        uint8_t y0 = *srcB++; // Y0
-        uint8_t v0 = *srcB++; // V0
-        uint8_t y1 = *srcB++; // Y1
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                // Get above line
+                uint8_t u0 = *srcB++; // U0
+                uint8_t y0 = *srcB++; // Y0
+                uint8_t v0 = *srcB++; // V0
+                uint8_t y1 = *srcB++; // Y1
 
-        // Get below line
-        *srcBb++; // U0
-        uint8_t y0b = *srcBb++; // Y0
-        *srcBb++; // V0
-        uint8_t y1b = *srcBb++; // Y1
+                                      // Get below line
+                *srcBb++; // U0
+                uint8_t y0b = *srcBb++; // Y0
+                *srcBb++; // V0
+                uint8_t y1b = *srcBb++; // Y1
 
-        // Assign above luma values
-        *dstB++ = y0;
-        *dstB++ = y1;
+                                        // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
 
-        // Assign below luma values
-        *dstBb++ = y0b;
-        *dstBb++ = y1b;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
 
-        // Assign chroma values
-        *dstU++ = u0;
-        *dstV++ = v0;
+                // Assigne chroma values
+                *dstU++ = u0;
+                *dstV++ = v0;
+            }
+        }
 
         return;
     }
@@ -289,36 +292,42 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideNV12 = height;
         int hStrideNV12 = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideUYVY422 + col * 4;
-        auto srcBb = srcB + hStrideUYVY422;
-        auto dstB = dstSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto dstBb = dstB + hStrideNV12;
-        auto dstC = dstSlice1 + lin * hStrideNV12 + col * 2;
+        // Iterate blocks of 2x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422 * 2;
+            auto srcBb = srcB + hStrideUYVY422;
+            auto dstB = dstSlice[0] + vIndex * hStrideNV12 * 2;
+            auto dstBb = dstB + hStrideNV12;
+            auto dstC = dstSlice[1] + vIndex * hStrideNV12;
 
-        // Get above line
-        uint8_t u0 = *srcB++; // U0
-        uint8_t y0 = *srcB++; // Y0
-        uint8_t v0 = *srcB++; // V0
-        uint8_t y1 = *srcB++; // Y1
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                // Get above line
+                uint8_t u0 = *srcB++; // U0
+                uint8_t y0 = *srcB++; // Y0
+                uint8_t v0 = *srcB++; // V0
+                uint8_t y1 = *srcB++; // Y1
 
-        // Get below line
-        *srcBb++; // U0
-        uint8_t y0b = *srcBb++; // Y0
-        *srcBb++; // V0
-        uint8_t y1b = *srcBb++; // Y1
+                                      // Get below line
+                *srcBb++; // U0
+                uint8_t y0b = *srcBb++; // Y0
+                *srcBb++; // V0
+                uint8_t y1b = *srcBb++; // Y1
 
-        // Assign above luma values
-        *dstB++ = y0;
-        *dstB++ = y1;
+                                        // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
 
-        // Assign below luma values
-        *dstBb++ = y0b;
-        *dstBb++ = y1b;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
 
-        // Assigne chroma values
-        *dstC++ = u0;
-        *dstC++ = v0;
+                // Assigne chroma values
+                *dstC++ = u0;
+                *dstC++ = v0;
+            }
+        }
 
         return;
     }
@@ -330,31 +339,37 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideV210 = height;
         int hStrideV210 = width / 6 * 4;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * hStrideUYVY422 + col * 12;
-        auto dstB = reinterpret_cast<uint32_t*>(dstSlice0) + lin * hStrideV210 + col * 4;
+        // Iterate blocks of 1x12 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * hStrideV210;
 
-        // Get components from source
-        auto u0 = *srcB++ << 2U; // U0
-        auto y0 = *srcB++ << 2U; // Y0
-        auto v0 = *srcB++ << 2U; // V0
-        auto y1 = *srcB++ << 2U; // Y1
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 12; hIndex++){
+                // Get components from source
+                auto u0 = *srcB++ << 2U; // U0
+                auto y0 = *srcB++ << 2U; // Y0
+                auto v0 = *srcB++ << 2U; // V0
+                auto y1 = *srcB++ << 2U; // Y1
 
-        auto u1 = *srcB++ << 2U; // U1
-        auto y2 = *srcB++ << 2U; // Y2
-        auto v1 = *srcB++ << 2U; // V1
-        auto y3 = *srcB++ << 2U; // Y3
+                auto u1 = *srcB++ << 2U; // U1
+                auto y2 = *srcB++ << 2U; // Y2
+                auto v1 = *srcB++ << 2U; // V1
+                auto y3 = *srcB++ << 2U; // Y3
 
-        auto u2 = *srcB++ << 2U; // U2
-        auto y4 = *srcB++ << 2U; // Y4
-        auto v2 = *srcB++ << 2U; // V2
-        auto y5 = *srcB++ << 2U; // Y5
+                auto u2 = *srcB++ << 2U; // U2
+                auto y4 = *srcB++ << 2U; // Y4
+                auto v2 = *srcB++ << 2U; // V2
+                auto y5 = *srcB++ << 2U; // Y5
 
-        // Assign values
-        *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
-        *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
-        *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
-        *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+                                         // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
+        }
 
         return;
     }
@@ -368,17 +383,22 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideUYVY422 = height;
         int hStrideUYVY422 = width * 2;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * hStrideYUV422P + col * 2;
-        auto dstB = dstSlice0 + lin * hStrideUYVY422 + col * 4;
-        auto srcU = srcSlice1 + lin * hStrideYUV422P / 2 + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV422P / 2 + col;
+        // Iterate blocks of 1x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
+            auto dstB = dstSlice[0] + vIndex * hStrideUYVY422;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV422P / 2;
 
-        // Assign values
-        *dstB++ = *srcU++; // U0
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcV++; // V0
-        *dstB++ = *srcB++; // Y1
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 2; hIndex++){
+                *dstB++ = *srcU++; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = *srcV++; // V0
+                *dstB++ = *srcB++; // Y1
+            }
+        }
 
         return;
     }
@@ -388,19 +408,10 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV422P = height;
         int hStrideYUV422P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * hStrideYUV422P + col * 2;
-        auto dstB = dstSlice0 + lin * hStrideYUV422P + col * 2;
-        auto srcU = srcSlice1 + lin * hStrideYUV422P / 2 + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV422P / 2 + col;
-        auto dstU = dstSlice1 + lin * hStrideYUV422P / 2 + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV422P / 2 + col;
-
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstU++ = *srcU++; // U0
-        *dstV++ = *srcV++; // V0
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
+        memcpy(dstSlice[1], srcSlice[1], vStrideYUV422P * hStrideYUV422P / 2);
+        memcpy(dstSlice[2], srcSlice[2], vStrideYUV422P * hStrideYUV422P / 2);
 
         return;
     }
@@ -412,35 +423,40 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV420P = height;
         int hStrideYUV420P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideYUV422P + col * 2;
-        auto srcBb = srcB + hStrideYUV422P;
-        auto dstB = dstSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto dstBb = dstB + hStrideYUV420P;
-        auto srcU = srcSlice1 + lin * hStrideYUV422P + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV422P + col;
-        auto srcUb = srcU + hStrideYUV422P / 2;
-        auto srcVb = srcV + hStrideYUV422P / 2;
-        auto dstU = dstSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV420P / 2 + col;
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
 
-        // Get above chroma values
-        uint8_t u = *srcU++; // U0
-        uint8_t v = *srcV++; // V0
+            // Iterate blocks of 2x1 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcUb = srcU + hStrideYUV422PChroma;
+                auto srcVb = srcV + hStrideYUV422PChroma;
+                auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+                auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
 
-        // Get below chroma values
-        uint8_t ub = *srcUb++; // U1
-        uint8_t vb = *srcVb++; // V1
+                for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                    // Get above chroma values
+                    uint8_t u = *srcU++; // U0
+                    uint8_t v = *srcV++; // V0
 
-        // Assign values
-        *dstU++ = uint8_t(lroundf((static_cast<float>(u) + static_cast<float>(ub)) / 2.f));
-        *dstV++ = uint8_t(lroundf((static_cast<float>(v) + static_cast<float>(vb)) / 2.f));
+                                         // Get below chroma values
+                    uint8_t ub = *srcUb++; // U1
+                    uint8_t vb = *srcVb++; // V1
+
+                                           // Assign values
+                    *dstU++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
+                    *dstV++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
+                }
+            }
+        }
 
         return;
     }
@@ -452,34 +468,39 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideNV12 = height;
         int hStrideNV12 = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideYUV422P + col * 2;
-        auto srcBb = srcB + hStrideYUV422P;
-        auto dstB = dstSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto dstBb = dstB + hStrideNV12;
-        auto srcU = srcSlice1 + lin * hStrideYUV422P + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV422P + col;
-        auto srcUb = srcU + hStrideYUV422P / 2;
-        auto srcVb = srcV + hStrideYUV422P / 2;
-        auto dstC = dstSlice1 + lin * hStrideNV12 + col * 2;
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
 
-        // Get above chroma values
-        uint8_t u = *srcU++; // U0
-        uint8_t v = *srcV++; // V0
+            // Iterate blocks of 2x1 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcUb = srcU + hStrideYUV422PChroma;
+                auto srcVb = srcV + hStrideYUV422PChroma;
+                auto dstC = dstSlice[1] + vIndex * hStrideNV12;
 
-        // Get below chroma values
-        uint8_t ub = *srcUb++; // U1
-        uint8_t vb = *srcVb++; // V1
+                for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                    // Get above chroma values
+                    uint8_t u = *srcU++; // U0
+                    uint8_t v = *srcV++; // V0
 
-        // Assign values
-        *dstC++ = uint8_t(lroundf((static_cast<float>(u) + static_cast<float>(ub)) / 2.f));
-        *dstC++ = uint8_t(lroundf((static_cast<float>(v) + static_cast<float>(vb)) / 2.f));
+                                         // Get below chroma values
+                    uint8_t ub = *srcUb++; // U1
+                    uint8_t vb = *srcVb++; // V1
+
+                                           // Assign values
+                    *dstC++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
+                    *dstC++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
+                }
+            }
+        }
 
         return;
     }
@@ -491,33 +512,39 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideV210 = height;
         int hStrideV210 = width / 6 * 4;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * hStrideYUV422P + col * 6;
-        auto dstB = reinterpret_cast<uint32_t*>(dstSlice0) + lin * hStrideV210 + col * 4;
-        auto srcU = srcSlice1 + lin * hStrideYUV422P / 2 + col * 3;
-        auto srcV = srcSlice2 + lin * hStrideYUV422P / 2 + col * 3;
+        // Iterate blocks of 1x6 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * hStrideV210;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV422P / 2;
 
-        // Get components from source
-        auto u0 = *srcU++ << 2U; // U0
-        auto y0 = *srcB++ << 2U; // Y0
-        auto v0 = *srcV++ << 2U; // V0
-        auto y1 = *srcB++ << 2U; // Y1
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 6; hIndex++){
+                // Get components from source
+                auto u0 = *srcU++ << 2U; // U0
+                auto y0 = *srcB++ << 2U; // Y0
+                auto v0 = *srcV++ << 2U; // V0
+                auto y1 = *srcB++ << 2U; // Y1
 
-        auto u1 = *srcU++ << 2U; // U1
-        auto y2 = *srcB++ << 2U; // Y2
-        auto v1 = *srcV++ << 2U; // V1
-        auto y3 = *srcB++ << 2U; // Y3
+                auto u1 = *srcU++ << 2U; // U1
+                auto y2 = *srcB++ << 2U; // Y2
+                auto v1 = *srcV++ << 2U; // V1
+                auto y3 = *srcB++ << 2U; // Y3
 
-        auto u2 = *srcU++ << 2U; // U2
-        auto y4 = *srcB++ << 2U; // Y4
-        auto v2 = *srcV++ << 2U; // V2
-        auto y5 = *srcB++ << 2U; // Y5
+                auto u2 = *srcU++ << 2U; // U2
+                auto y4 = *srcB++ << 2U; // Y4
+                auto v2 = *srcV++ << 2U; // V2
+                auto y5 = *srcB++ << 2U; // Y5
 
-        // Assign value
-        *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
-        *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
-        *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
-        *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+                                         // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
+        }
 
         return;
     }
@@ -531,29 +558,35 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideUYVY422 = height;
         int hStrideUYVY422 = width * 2;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto srcBb = srcB + hStrideYUV420P;
-        auto dstB = dstSlice0 + lin * 2 * hStrideUYVY422 + col * 4;
-        auto dstBb = dstB + hStrideUYVY422;
-        auto srcU = srcSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV420P / 2 + col;
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto srcBb = srcB + hStrideYUV420P;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideUYVY422;
+            auto dstBb = dstB + hStrideUYVY422;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
 
-        // Get chroma values
-        uint8_t u = *srcU++; // U
-        uint8_t v = *srcV++; // V
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcU++; // U
+                uint8_t v = *srcV++; // V
 
-        // Assign above line values
-        *dstB++ = u; // U0
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = v; // V0
-        *dstB++ = *srcB++; // Y1
+                                     // Assign above line values
+                *dstB++ = u; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = v; // V0
+                *dstB++ = *srcB++; // Y1
 
-        // Assign below line values
-        *dstBb++ = u; // U0
-        *dstBb++ = *srcBb++; // Y0
-        *dstBb++ = v; // V0
-        *dstBb++ = *srcBb++; // Y1
+                                   // Assign below line values
+                *dstBb++ = u; // U0
+                *dstBb++ = *srcBb++; // Y0
+                *dstBb++ = v; // V0
+                *dstBb++ = *srcBb++; // Y1
+            }
+        }
 
         return;
     }
@@ -565,34 +598,39 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV422P = height;
         int hStrideYUV422P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto srcBb = srcB + hStrideYUV420P;
-        auto dstB = dstSlice0 + lin * 2 * hStrideYUV422P + col * 2;
-        auto dstBb = dstB + hStrideYUV422P;
-        auto srcU = srcSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV420P / 2 + col;
-        auto dstU = dstSlice1 + lin * hStrideYUV422P + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV422P + col;
-        auto dstUb = dstU + hStrideYUV422P / 2;
-        auto dstVb = dstV + hStrideYUV422P / 2;
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
 
-        // Get chroma values
-        uint8_t u = *srcU++; // U
-        uint8_t v = *srcV++; // V
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+                auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+                auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstUb = dstU + hStrideYUV422PChroma;
+                auto dstVb = dstV + hStrideYUV422PChroma;
 
-        // Assign values dupicated
-        *dstU++ = u;
-        *dstV++ = v;
+                for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                    // Get chroma values
+                    uint8_t u = *srcU++; // U
+                    uint8_t v = *srcV++; // V
 
-        *dstUb++ = u;
-        *dstVb++ = v;
+                                         // Assign values dupicated
+                    *dstU++ = u;
+                    *dstV++ = v;
+
+                    *dstUb++ = u;
+                    *dstVb++ = v;
+                }
+            }
+        }
 
         return;
     }
@@ -602,24 +640,10 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV420P = height;
         int hStrideYUV420P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto srcBb = srcB + hStrideYUV420P;
-        auto dstB = dstSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto dstBb = dstB + hStrideYUV420P;
-        auto srcU = srcSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV420P / 2 + col;
-        auto dstU = dstSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV420P / 2 + col;
-
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
-
-        *dstU++ = *srcU++; // U0
-        *dstV++ = *srcV++; // V0
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+        memcpy(dstSlice[1], srcSlice[1], vStrideYUV420P * hStrideYUV420P / 4);
+        memcpy(dstSlice[2], srcSlice[2], vStrideYUV420P * hStrideYUV420P / 4);
 
         return;
     }
@@ -631,23 +655,26 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideNV12 = height;
         int hStrideNV12 = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto srcBb = srcB + hStrideYUV420P;
-        auto dstB = dstSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto dstBb = dstB + hStrideNV12;
-        auto srcU = srcSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto srcV = srcSlice2 + lin * hStrideYUV420P / 2 + col;
-        auto dstC = dstSlice1 + lin * hStrideNV12 + col * 2;
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
 
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+                auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+                auto dstC = dstSlice[1] + vIndex * hStrideNV12;
 
-        *dstC++ = *srcU++; // U0
-        *dstC++ = *srcV++; // V0
+                for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                    *dstC++ = *srcU++; // U
+                    *dstC++ = *srcV++; // V
+                }
+            }
+        }
 
         return;
     }
@@ -659,51 +686,57 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideV210 = height;
         int hStrideV210 = width / 6 * 4;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideYUV420P + col * 6;
-        auto srcBb = srcB + hStrideYUV420P;
-        auto dstB = reinterpret_cast<uint32_t*>(dstSlice0) + lin * 2 * hStrideV210 + col * 4;
-        auto dstBb = dstB + hStrideV210;
-        auto srcU = srcSlice1 + lin * hStrideYUV420P / 2 + col * 3;
-        auto srcV = srcSlice2 + lin * hStrideYUV420P / 2 + col * 3;
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto srcBb = srcB + hStrideYUV420P;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * 2 * hStrideV210;
+            auto dstBb = dstB + hStrideV210;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
 
-        // Get lumas from above line
-        auto y0 = *srcB++ << 2U;
-        auto y1 = *srcB++ << 2U;
-        auto y2 = *srcB++ << 2U;
-        auto y3 = *srcB++ << 2U;
-        auto y4 = *srcB++ << 2U;
-        auto y5 = *srcB++ << 2U;
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 6; hIndex++){
+                // Get lumas from above line
+                auto y0 = *srcB++ << 2U;
+                auto y1 = *srcB++ << 2U;
+                auto y2 = *srcB++ << 2U;
+                auto y3 = *srcB++ << 2U;
+                auto y4 = *srcB++ << 2U;
+                auto y5 = *srcB++ << 2U;
 
-        // Get lumas from below line
-        auto y0b = *srcBb++ << 2U;
-        auto y1b = *srcBb++ << 2U;
-        auto y2b = *srcBb++ << 2U;
-        auto y3b = *srcBb++ << 2U;
-        auto y4b = *srcBb++ << 2U;
-        auto y5b = *srcBb++ << 2U;
+                // Get lumas from below line
+                auto y0b = *srcBb++ << 2U;
+                auto y1b = *srcBb++ << 2U;
+                auto y2b = *srcBb++ << 2U;
+                auto y3b = *srcBb++ << 2U;
+                auto y4b = *srcBb++ << 2U;
+                auto y5b = *srcBb++ << 2U;
 
-        // Get chroma U
-        auto u0 = *srcU++ << 2U;
-        auto u1 = *srcU++ << 2U;
-        auto u2 = *srcU++ << 2U;
+                // Get chroma U
+                auto u0 = *srcU++ << 2U;
+                auto u1 = *srcU++ << 2U;
+                auto u2 = *srcU++ << 2U;
 
-        // Get chroma V
-        auto v0 = *srcV++ << 2U;
-        auto v1 = *srcV++ << 2U;
-        auto v2 = *srcV++ << 2U;
+                // Get chroma V
+                auto v0 = *srcV++ << 2U;
+                auto v1 = *srcV++ << 2U;
+                auto v2 = *srcV++ << 2U;
 
-        // Assign above line
-        *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
-        *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
-        *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
-        *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+                // Assign above line
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
 
-        // Assign below line
-        *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
-        *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
-        *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
-        *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+                // Assign below line
+                *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
+                *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
+                *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
+                *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+            }
+        }
 
         return;
     }
@@ -717,28 +750,34 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideUYVY422 = height;
         int hStrideUYVY422 = width * 2;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto srcBb = srcB + hStrideNV12;
-        auto dstB = dstSlice0 + lin * 2 * hStrideUYVY422 + col * 4;
-        auto dstBb = dstB + hStrideUYVY422;
-        auto srcC = srcSlice1 + lin * hStrideNV12 + col * 2;
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideNV12;
+            auto srcBb = srcB + hStrideNV12;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideUYVY422;
+            auto dstBb = dstB + hStrideUYVY422;
+            auto srcC = srcSlice[1] + vIndex * hStrideNV12;
 
-        // Get chroma values
-        uint8_t u = *srcC++; // U
-        uint8_t v = *srcC++; // V
+            for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcC++; // U
+                uint8_t v = *srcC++; // V
 
-        // Assign above line values
-        *dstB++ = u; // U0
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = v; // V0
-        *dstB++ = *srcB++; // Y1
+                                     // Assign above line values
+                *dstB++ = u; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = v; // V0
+                *dstB++ = *srcB++; // Y1
 
-        // Assign below line values
-        *dstBb++ = u; // U0
-        *dstBb++ = *srcBb++; // Y0
-        *dstBb++ = v; // V0
-        *dstBb++ = *srcBb++; // Y1
+                                   // Assign below line values
+                *dstBb++ = u; // U0
+                *dstBb++ = *srcBb++; // Y0
+                *dstBb++ = v; // V0
+                *dstBb++ = *srcBb++; // Y1
+            }
+        }
 
         return;
     }
@@ -750,33 +789,38 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV422P = height;
         int hStrideYUV422P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto srcBb = srcB + hStrideNV12;
-        auto dstB = dstSlice0 + lin * 2 * hStrideYUV422P + col * 2;
-        auto dstBb = dstB + hStrideYUV422P;
-        auto srcC = srcSlice1 + lin * hStrideNV12 + col * 2;
-        auto dstU = dstSlice1 + lin * hStrideYUV422P + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV422P + col;
-        auto dstUb = dstU + hStrideYUV422P / 2;
-        auto dstVb = dstV + hStrideYUV422P / 2;
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
 
-        // Get chroma values
-        uint8_t u = *srcC++; // U
-        uint8_t v = *srcC++; // V
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcC = srcSlice[1] + vIndex * hStrideNV12;
+                auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstUb = dstU + hStrideYUV422PChroma;
+                auto dstVb = dstV + hStrideYUV422PChroma;
 
-        // Assign values dupicated
-        *dstU++ = u;
-        *dstV++ = v;
+                for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                    // Get chroma values
+                    uint8_t u = *srcC++; // U
+                    uint8_t v = *srcC++; // V
 
-        *dstUb++ = u;
-        *dstVb++ = v;
+                                         // Assign values dupicated
+                    *dstU++ = u;
+                    *dstV++ = v;
+
+                    *dstUb++ = u;
+                    *dstVb++ = v;
+                }
+            }
+        }
 
         return;
     }
@@ -788,23 +832,26 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV420P = height;
         int hStrideYUV420P = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto srcBb = srcB + hStrideNV12;
-        auto dstB = dstSlice0 + lin * 2 * hStrideYUV420P + col * 2;
-        auto dstBb = dstB + hStrideYUV420P;
-        auto srcC = srcSlice1 + lin * hStrideNV12 + col * 2;
-        auto dstU = dstSlice1 + lin * hStrideYUV420P / 2 + col;
-        auto dstV = dstSlice2 + lin * hStrideYUV420P / 2 + col;
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
 
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideNV12; vIndex++){
+                // Discover buffer pointers
+                auto srcC = srcSlice[1] + vIndex * hStrideNV12 / 2;
+                auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 4;
+                auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 4;
 
-        *dstU++ = *srcC++; // U0
-        *dstV++ = *srcC++; // V0
+                for(int hIndex = 0; hIndex < hStrideNV12 / 4; hIndex++){
+                    *dstU++ = *srcC++; // U
+                    *dstV++ = *srcC++; // V
+                }
+            }
+        }
 
         return;
     }
@@ -814,22 +861,9 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideNV12 = height;
         int hStrideNV12 = width;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto srcBb = srcB + hStrideNV12;
-        auto dstB = dstSlice0 + lin * 2 * hStrideNV12 + col * 2;
-        auto dstBb = dstB + hStrideNV12;
-        auto srcC = srcSlice1 + lin * hStrideNV12 + col * 2;
-        auto dstC = dstSlice1 + lin * hStrideNV12 + col * 2;
-
-        // Assign values
-        *dstB++ = *srcB++; // Y0
-        *dstB++ = *srcB++; // Y1
-        *dstBb++ = *srcBb++; // Y2
-        *dstBb++ = *srcBb++; // Y3
-
-        *dstC++ = *srcC++; // U0
-        *dstC++ = *srcC++; // V0
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+        memcpy(dstSlice[1], srcSlice[1], vStrideNV12 * hStrideNV12 / 2);
 
         return;
     }
@@ -841,48 +875,54 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideV210 = height;
         int hStrideV210 = width / 6 * 4;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * 2 * hStrideNV12 + col * 6;
-        auto srcBb = srcB + hStrideNV12;
-        auto dstB = reinterpret_cast<uint32_t*>(dstSlice0) + lin * 2 * hStrideV210 + col * 4;
-        auto dstBb = dstB + hStrideV210;
-        auto srcC = srcSlice1 + lin * hStrideNV12 + col * 6;
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideNV12;
+            auto srcBb = srcB + hStrideNV12;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * 2 * hStrideV210;
+            auto dstBb = dstB + hStrideV210;
+            auto srcC = srcSlice[1] + vIndex * hStrideNV12;
 
-        // Get lumas from above line
-        auto y0 = *srcB++ << 2U;
-        auto y1 = *srcB++ << 2U;
-        auto y2 = *srcB++ << 2U;
-        auto y3 = *srcB++ << 2U;
-        auto y4 = *srcB++ << 2U;
-        auto y5 = *srcB++ << 2U;
+            for(int hIndex = 0; hIndex < hStrideNV12 / 6; hIndex++){
+                // Get lumas from above line
+                auto y0 = *srcB++ << 2U;
+                auto y1 = *srcB++ << 2U;
+                auto y2 = *srcB++ << 2U;
+                auto y3 = *srcB++ << 2U;
+                auto y4 = *srcB++ << 2U;
+                auto y5 = *srcB++ << 2U;
 
-        // Get lumas from below line
-        auto y0b = *srcBb++ << 2U;
-        auto y1b = *srcBb++ << 2U;
-        auto y2b = *srcBb++ << 2U;
-        auto y3b = *srcBb++ << 2U;
-        auto y4b = *srcBb++ << 2U;
-        auto y5b = *srcBb++ << 2U;
+                // Get lumas from below line
+                auto y0b = *srcBb++ << 2U;
+                auto y1b = *srcBb++ << 2U;
+                auto y2b = *srcBb++ << 2U;
+                auto y3b = *srcBb++ << 2U;
+                auto y4b = *srcBb++ << 2U;
+                auto y5b = *srcBb++ << 2U;
 
-        // Get chroma U and V
-        auto u0 = *srcC++ << 2U;
-        auto v0 = *srcC++ << 2U;
-        auto u1 = *srcC++ << 2U;
-        auto v1 = *srcC++ << 2U;
-        auto u2 = *srcC++ << 2U;
-        auto v2 = *srcC++ << 2U;
+                // Get chroma U and V
+                auto u0 = *srcC++ << 2U;
+                auto v0 = *srcC++ << 2U;
+                auto u1 = *srcC++ << 2U;
+                auto v1 = *srcC++ << 2U;
+                auto u2 = *srcC++ << 2U;
+                auto v2 = *srcC++ << 2U;
 
-        // Assign above line
-        *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
-        *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
-        *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
-        *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+                // Assign above line
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
 
-        // Assign below line
-        *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
-        *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
-        *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
-        *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+                // Assign below line
+                *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
+                *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
+                *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
+                *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+            }
+        }
 
         return;
     }
@@ -896,45 +936,50 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideUYVY422 = height;
         int hStrideUYVY422 = width * 2;
 
-        // Discover buffer pointers
-        auto srcB = reinterpret_cast<uint32_t*>(srcSlice0) + lin * hStrideV210 + col * 4;
-        auto dstB = dstSlice0 + lin * hStrideUYVY422 + col * 12;
+        // Iterate blocks of 1x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * hStrideUYVY422;
 
-        // Assign values
-        auto u0 = (*srcB >> 2U) & 0xFF; // U0
-        auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
-        auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
-        *srcB++;
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-        auto y1 = (*srcB >> 2U) & 0xFF; // Y1
-        auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
-        auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
-        *srcB++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-        auto v1 = (*srcB >> 2U) & 0xFF; // V1
-        auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
-        auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
-        *srcB++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-        auto y4 = (*srcB >> 2U) & 0xFF; // Y4
-        auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
-        auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
-        *srcB++;
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-        *(dstB++) = u0;
-        *(dstB++) = y0;
-        *(dstB++) = v0;
-        *(dstB++) = y1;
+                *(dstB++) = u0;
+                *(dstB++) = y0;
+                *(dstB++) = v0;
+                *(dstB++) = y1;
 
-        *(dstB++) = u1;
-        *(dstB++) = y2;
-        *(dstB++) = v1;
-        *(dstB++) = y3;
+                *(dstB++) = u1;
+                *(dstB++) = y2;
+                *(dstB++) = v1;
+                *(dstB++) = y3;
 
-        *(dstB++) = u2;
-        *(dstB++) = y4;
-        *(dstB++) = v2;
-        *(dstB++) = y5;
+                *(dstB++) = u2;
+                *(dstB++) = y4;
+                *(dstB++) = v2;
+                *(dstB++) = y5;
+            }
+        }
 
         return;
     }
@@ -946,47 +991,52 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV422P = height;
         int hStrideYUV422P = width;
 
-        // Discover buffer pointers
-        auto srcB = reinterpret_cast<uint32_t*>(srcSlice0) + lin * hStrideV210 + col * 4;
-        auto dstB = dstSlice0 + lin * hStrideYUV422P + col * 6;
-        auto dstU = dstSlice1 + lin * hStrideYUV422P / 2 + col * 3;
-        auto dstV = dstSlice2 + lin * hStrideYUV422P / 2 + col * 3;
+        // Iterate blocks of 1x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV422P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV422P / 2;
 
-        // Assign values
-        auto u0 = (*srcB >> 2U) & 0xFF; // U0
-        auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
-        auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
-        *srcB++;
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-        auto y1 = (*srcB >> 2U) & 0xFF; // Y1
-        auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
-        auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
-        *srcB++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-        auto v1 = (*srcB >> 2U) & 0xFF; // V1
-        auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
-        auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
-        *srcB++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-        auto y4 = (*srcB >> 2U) & 0xFF; // Y4
-        auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
-        auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
-        *srcB++;
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-        *(dstU++) = u0;
-        *(dstB++) = y0;
-        *(dstV++) = v0;
-        *(dstB++) = y1;
+                *(dstU++) = u0;
+                *(dstB++) = y0;
+                *(dstV++) = v0;
+                *(dstB++) = y1;
 
-        *(dstU++) = u1;
-        *(dstB++) = y2;
-        *(dstV++) = v1;
-        *(dstB++) = y3;
+                *(dstU++) = u1;
+                *(dstB++) = y2;
+                *(dstV++) = v1;
+                *(dstB++) = y3;
 
-        *(dstU++) = u2;
-        *(dstB++) = y4;
-        *(dstV++) = v2;
-        *(dstB++) = y5;
+                *(dstU++) = u2;
+                *(dstB++) = y4;
+                *(dstV++) = v2;
+                *(dstB++) = y5;
+            }
+        }
 
         return;
     }
@@ -998,80 +1048,86 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV420P = height;
         int hStrideYUV420P = width;
 
-        // Discover buffer pointers
-        auto srcB = reinterpret_cast<uint32_t*>(srcSlice0) + lin * 2 * hStrideV210 + col * 4;
-        auto srcBb = srcB + hStrideV210;
-        auto dstB = dstSlice0 + lin * 2 * hStrideYUV420P + col * 6;
-        auto dstBb = dstB + hStrideYUV420P;
-        auto dstU = dstSlice1 + lin * hStrideYUV420P / 2 + col * 3;
-        auto dstV = dstSlice2 + lin * hStrideYUV420P / 2 + col * 3;
+        // Iterate blocks of 2x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * 2 * hStrideV210;
+            auto srcBb = srcB + hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto dstBb = dstB + hStrideYUV420P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
 
-        // Get above line
-        auto u0 = (*srcB >> 2U) & 0xFF; // U0
-        auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
-        auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
-        *srcB++;
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                // Get above line
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-        auto y1 = (*srcB >> 2U) & 0xFF; // Y1
-        auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
-        auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
-        *srcB++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-        auto v1 = (*srcB >> 2U) & 0xFF; // V1
-        auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
-        auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
-        *srcB++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-        auto y4 = (*srcB >> 2U) & 0xFF; // Y4
-        auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
-        auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
-        *srcB++;
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-        // Get below line
-        auto u0b = (*srcBb >> 2U) & 0xFF; // U0
-        auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
-        auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
-        *srcBb++;
+                // Get below line
+                auto u0b = (*srcBb >> 2U) & 0xFF; // U0
+                auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
+                *srcBb++;
 
-        auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
-        auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
-        auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
-        *srcBb++;
+                auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
+                auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
+                auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
+                *srcBb++;
 
-        auto v1b = (*srcBb >> 2U) & 0xFF; // V1
-        auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
-        auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
-        *srcBb++;
+                auto v1b = (*srcBb >> 2U) & 0xFF; // V1
+                auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
+                *srcBb++;
 
-        auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
-        auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
-        auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
-        *srcBb++;
+                auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
+                auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
+                auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
+                *srcBb++;
 
-        // Assign above luma values
-        *dstB++ = y0;
-        *dstB++ = y1;
-        *dstB++ = y2;
-        *dstB++ = y3;
-        *dstB++ = y4;
-        *dstB++ = y5;
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
+                *dstB++ = y2;
+                *dstB++ = y3;
+                *dstB++ = y4;
+                *dstB++ = y5;
 
-        // Assign below luma values
-        *dstBb++ = y0b;
-        *dstBb++ = y1b;
-        *dstBb++ = y2b;
-        *dstBb++ = y3b;
-        *dstBb++ = y4b;
-        *dstBb++ = y5b;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+                *dstBb++ = y2b;
+                *dstBb++ = y3b;
+                *dstBb++ = y4b;
+                *dstBb++ = y5b;
 
-        // Assign chroma values
-        *dstU++ = uint8_t(lroundf((static_cast<float>(u0) + static_cast<float>(u0b)) / 2.f));
-        *dstU++ = uint8_t(lroundf((static_cast<float>(u1) + static_cast<float>(u1b)) / 2.f));
-        *dstU++ = uint8_t(lroundf((static_cast<float>(u2) + static_cast<float>(u2b)) / 2.f));
+                // Assign chroma values
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
 
-        *dstV++ = uint8_t(lroundf((static_cast<float>(v0) + static_cast<float>(v0b)) / 2.f));
-        *dstV++ = uint8_t(lroundf((static_cast<float>(v1) + static_cast<float>(v1b)) / 2.f));
-        *dstV++ = uint8_t(lroundf((static_cast<float>(v2) + static_cast<float>(v2b)) / 2.f));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+            }
+        }
 
         return;
     }
@@ -1083,78 +1139,84 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideNV12 = height;
         int hStrideNV12 = width;
 
-        // Discover buffer pointers
-        auto srcB = reinterpret_cast<uint32_t*>(srcSlice0) + lin * 2 * hStrideV210 + col * 4;
-        auto srcBb = srcB + hStrideV210;
-        auto dstB = dstSlice0 + lin * 2 * hStrideNV12 + col * 6;
-        auto dstBb = dstB + hStrideNV12;
-        auto dstC = dstSlice1 + lin * hStrideNV12 + col * 6;
+        // Iterate blocks of 2x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * 2 * hStrideV210;
+            auto srcBb = srcB + hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideNV12;
+            auto dstBb = dstB + hStrideNV12;
+            auto dstC = dstSlice[1] + vIndex * hStrideNV12;
 
-        // Get above line
-        auto u0 = (*srcB >> 2U) & 0xFF; // U0
-        auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
-        auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
-        *srcB++;
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                // Get above line
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-        auto y1 = (*srcB >> 2U) & 0xFF; // Y1
-        auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
-        auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
-        *srcB++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-        auto v1 = (*srcB >> 2U) & 0xFF; // V1
-        auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
-        auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
-        *srcB++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-        auto y4 = (*srcB >> 2U) & 0xFF; // Y4
-        auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
-        auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
-        *srcB++;
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-        // Get below line
-        auto u0b = (*srcBb >> 2U) & 0xFF; // U0
-        auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
-        auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
-        *srcBb++;
+                // Get below line
+                auto u0b = (*srcBb >> 2U) & 0xFF; // U0
+                auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
+                *srcBb++;
 
-        auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
-        auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
-        auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
-        *srcBb++;
+                auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
+                auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
+                auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
+                *srcBb++;
 
-        auto v1b = (*srcBb >> 2U) & 0xFF; // V1
-        auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
-        auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
-        *srcBb++;
+                auto v1b = (*srcBb >> 2U) & 0xFF; // V1
+                auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
+                *srcBb++;
 
-        auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
-        auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
-        auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
-        *srcBb++;
+                auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
+                auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
+                auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
+                *srcBb++;
 
-        // Assign above luma values
-        *dstB++ = y0;
-        *dstB++ = y1;
-        *dstB++ = y2;
-        *dstB++ = y3;
-        *dstB++ = y4;
-        *dstB++ = y5;
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
+                *dstB++ = y2;
+                *dstB++ = y3;
+                *dstB++ = y4;
+                *dstB++ = y5;
 
-        // Assign below luma values
-        *dstBb++ = y0b;
-        *dstBb++ = y1b;
-        *dstBb++ = y2b;
-        *dstBb++ = y3b;
-        *dstBb++ = y4b;
-        *dstBb++ = y5b;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+                *dstBb++ = y2b;
+                *dstBb++ = y3b;
+                *dstBb++ = y4b;
+                *dstBb++ = y5b;
 
-        // Assign chroma values
-        *dstC++ = uint8_t(lroundf((static_cast<float>(u0) + static_cast<float>(u0b)) / 2.f));
-        *dstC++ = uint8_t(lroundf((static_cast<float>(v0) + static_cast<float>(v0b)) / 2.f));
-        *dstC++ = uint8_t(lroundf((static_cast<float>(u1) + static_cast<float>(u1b)) / 2.f));
-        *dstC++ = uint8_t(lroundf((static_cast<float>(v1) + static_cast<float>(v1b)) / 2.f));
-        *dstC++ = uint8_t(lroundf((static_cast<float>(u2) + static_cast<float>(u2b)) / 2.f));
-        *dstC++ = uint8_t(lroundf((static_cast<float>(v2) + static_cast<float>(v2b)) / 2.f));
+                // Assign chroma values
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+            }
+        }
 
         return;
     }
@@ -1164,13 +1226,8 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideV210 = height;
         int hStrideV210 = width / 6 * 4;
 
-        // Discover buffer pointers
-        auto srcB = reinterpret_cast<uint32_t*>(srcSlice0) + lin * hStrideV210 + col * 2;
-        auto dstB = reinterpret_cast<uint32_t*>(dstSlice0) + lin * hStrideV210 + col * 2;
-
-        // Assign values
-        *dstB++ = *srcB++; // W0
-        *dstB++ = *srcB++; // W1
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideV210 * hStrideV210 * sizeof(uint32_t));
 
         return;
     }
@@ -1182,52 +1239,57 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideYUV422P = height;
         int hStrideYUV422P = width;
 
-        // Discover buffer pointers
-        auto srcB = reinterpret_cast<uint32_t*>(srcSlice0) + lin * hStrideV210 + col * 4;
-        auto dstB = dstSlice0 + lin * hStrideYUV422P + col * 6;
-        auto dstU = dstSlice1 + lin * hStrideYUV422P / 2 + col * 3;
-        auto dstV = dstSlice2 + lin * hStrideYUV422P / 2 + col * 3;
-
         // Create const for normalization
-        float constLuma = 219.f / 1023.f;
-        float constChroma = 224.f / 1023.f;
-        float const16 = 16.f;
+        double constLuma = 219. / 1023.;
+        double constChroma = 224. / 1023.;
+        double const16 = 16.;
 
-        // Assign values
-        auto u0 = *srcB & 0x3FF; // U0
-        auto y0 = (*srcB >> 10U) & 0x3FF; // Y0
-        auto v0 = (*srcB >> 20U) & 0x3FF; // V0
-        *srcB++;
+        // Iterate blocks of 1x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV422P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV422P / 2;
 
-        auto y1 = *srcB & 0x3FF; // Y1
-        auto u1 = (*srcB >> 10U) & 0x3FF; // U1
-        auto y2 = (*srcB >> 20U) & 0x3FF; // Y2
-        *srcB++;
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = *srcB & 0x3FF; // U0
+                auto y0 = (*srcB >> 10U) & 0x3FF; // Y0
+                auto v0 = (*srcB >> 20U) & 0x3FF; // V0
+                *srcB++;
 
-        auto v1 = *srcB & 0x3FF; // V1
-        auto y3 = (*srcB >> 10U) & 0x3FF; // Y3
-        auto u2 = (*srcB >> 20U) & 0x3FF; // U2
-        *srcB++;
+                auto y1 = *srcB & 0x3FF; // Y1
+                auto u1 = (*srcB >> 10U) & 0x3FF; // U1
+                auto y2 = (*srcB >> 20U) & 0x3FF; // Y2
+                *srcB++;
 
-        auto y4 = *srcB & 0x3FF; // Y4
-        auto v2 = (*srcB >> 10U) & 0x3FF; // V2
-        auto y5 = (*srcB >> 20U) & 0x3FF; // Y5
-        *srcB++;
+                auto v1 = *srcB & 0x3FF; // V1
+                auto y3 = (*srcB >> 10U) & 0x3FF; // Y3
+                auto u2 = (*srcB >> 20U) & 0x3FF; // U2
+                *srcB++;
 
-        *dstU++ = uint8_t(lroundf(static_cast<float>(u0) * constChroma + const16));
-        *dstB++ = uint8_t(lroundf(static_cast<float>(y0) * constLuma + const16));
-        *dstV++ = uint8_t(lroundf(static_cast<float>(v0) * constChroma + const16));
-        *dstB++ = uint8_t(lroundf(static_cast<float>(y1) * constLuma + const16));
+                auto y4 = *srcB & 0x3FF; // Y4
+                auto v2 = (*srcB >> 10U) & 0x3FF; // V2
+                auto y5 = (*srcB >> 20U) & 0x3FF; // Y5
+                *srcB++;
 
-        *dstU++ = uint8_t(lroundf(static_cast<float>(u1) * constChroma + const16));
-        *dstB++ = uint8_t(lroundf(static_cast<float>(y2) * constLuma + const16));
-        *dstV++ = uint8_t(lroundf(static_cast<float>(v1) * constChroma + const16));
-        *dstB++ = uint8_t(lroundf(static_cast<float>(y3) * constLuma + const16));
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u0) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y0) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v0) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y1) * constLuma + const16));
 
-        *dstU++ = uint8_t(lroundf(static_cast<float>(u2) * constChroma + const16));
-        *dstB++ = uint8_t(lroundf(static_cast<float>(y4) * constLuma + const16));
-        *dstV++ = uint8_t(lroundf(static_cast<float>(v2) * constChroma + const16));
-        *dstB++ = uint8_t(lroundf(static_cast<float>(y5) * constLuma + const16));
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u1) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y2) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v1) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y3) * constLuma + const16));
+
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u2) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y4) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v2) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y5) * constLuma + const16));
+            }
+        }
 
         return;
     }
@@ -1241,54 +1303,60 @@ __global__ void cuda_formatConversion(int width, int height,
         int vStrideV210 = height;
         int hStrideV210 = width / 6 * 4;
 
-        // Discover buffer pointers
-        auto srcB = srcSlice0 + lin * hStrideYUV422P + col * 6;
-        auto dstB = reinterpret_cast<uint32_t*>(dstSlice0) + lin * hStrideV210 + col * 4;
-        auto srcU = srcSlice1 + lin * hStrideYUV422P / 2 + col * 3;
-        auto srcV = srcSlice2 + lin * hStrideYUV422P / 2 + col * 3;
-
         // Create const for normalization
-        float const16 = 16.f;
-        float constLuma = 1023.f / 219.f;
-        float constChroma = 1023.f / 224.f;
+        double const16 = 16.;
+        double constLuma = 1023. / 219.;
+        double constChroma = 1023. / 224.;
 
-        // Get components from source
-        auto u0n = *srcU++; // U0
-        auto y0n = *srcB++; // Y0
-        auto v0n = *srcV++; // V0
-        auto y1n = *srcB++; // Y1
+        // Iterate blocks of 1x6 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * hStrideV210;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV422P / 2;
 
-        auto u1n = *srcU++; // U1
-        auto y2n = *srcB++; // Y2
-        auto v1n = *srcV++; // V1
-        auto y3n = *srcB++; // Y3
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 6; hIndex++){
+                // Get components from source
+                auto u0n = *srcU++; // U0
+                auto y0n = *srcB++; // Y0
+                auto v0n = *srcV++; // V0
+                auto y1n = *srcB++; // Y1
 
-        auto u2n = *srcU++; // U2
-        auto y4n = *srcB++; // Y4
-        auto v2n = *srcV++; // V2
-        auto y5n = *srcB++; // Y5
+                auto u1n = *srcU++; // U1
+                auto y2n = *srcB++; // Y2
+                auto v1n = *srcV++; // V1
+                auto y3n = *srcB++; // Y3
 
-        // Denormalize values
-        auto v0 = uint16_t(lroundf((static_cast<float>(v0n) - const16) * constChroma)) & 0x3FF;
-        auto y0 = uint16_t(lroundf((static_cast<float>(y0n) - const16) * constLuma)) & 0x3FF;
-        auto u0 = uint16_t(lroundf((static_cast<float>(u0n) - const16) * constChroma)) & 0x3FF;
-        auto y2 = uint16_t(lroundf((static_cast<float>(y2n) - const16) * constLuma)) & 0x3FF;
+                auto u2n = *srcU++; // U2
+                auto y4n = *srcB++; // Y4
+                auto v2n = *srcV++; // V2
+                auto y5n = *srcB++; // Y5
 
-        auto u1 = uint16_t(lroundf((static_cast<float>(u1n) - const16) * constChroma)) & 0x3FF;
-        auto y1 = uint16_t(lroundf((static_cast<float>(y1n) - const16) * constLuma)) & 0x3FF;
-        auto u2 = uint16_t(lroundf((static_cast<float>(u2n) - const16) * constChroma)) & 0x3FF;
-        auto y3 = uint16_t(lroundf((static_cast<float>(y3n) - const16) * constLuma)) & 0x3FF;
+                                    // Denormalize values
+                auto v0 = uint16_t(roundFast((static_cast<double>(v0n) - const16) * constChroma)) & 0x3FF;
+                auto y0 = uint16_t(roundFast((static_cast<double>(y0n) - const16) * constLuma)) & 0x3FF;
+                auto u0 = uint16_t(roundFast((static_cast<double>(u0n) - const16) * constChroma)) & 0x3FF;
+                auto y2 = uint16_t(roundFast((static_cast<double>(y2n) - const16) * constLuma)) & 0x3FF;
 
-        auto v1 = uint16_t(lroundf((static_cast<float>(v1n) - const16) * constChroma)) & 0x3FF;
-        auto y5 = uint16_t(lroundf((static_cast<float>(y5n) - const16) * constLuma)) & 0x3FF;
-        auto v2 = uint16_t(lroundf((static_cast<float>(v2n) - const16) * constChroma)) & 0x3FF;
-        auto y4 = uint16_t(lroundf((static_cast<float>(y4n) - const16) * constLuma)) & 0x3FF;
+                auto u1 = uint16_t(roundFast((static_cast<double>(u1n) - const16) * constChroma)) & 0x3FF;
+                auto y1 = uint16_t(roundFast((static_cast<double>(y1n) - const16) * constLuma)) & 0x3FF;
+                auto u2 = uint16_t(roundFast((static_cast<double>(u2n) - const16) * constChroma)) & 0x3FF;
+                auto y3 = uint16_t(roundFast((static_cast<double>(y3n) - const16) * constLuma)) & 0x3FF;
 
-        // Assign value
-        *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
-        *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
-        *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
-        *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+                auto v1 = uint16_t(roundFast((static_cast<double>(v1n) - const16) * constChroma)) & 0x3FF;
+                auto y5 = uint16_t(roundFast((static_cast<double>(y5n) - const16) * constLuma)) & 0x3FF;
+                auto v2 = uint16_t(roundFast((static_cast<double>(v2n) - const16) * constChroma)) & 0x3FF;
+                auto y4 = uint16_t(roundFast((static_cast<double>(y4n) - const16) * constLuma)) & 0x3FF;
+
+                // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
+        }
 
         return;
     }
@@ -1296,20 +1364,20 @@ __global__ void cuda_formatConversion(int width, int height,
 }
 
 // Precalculate coefficients
-int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, double(*coefFunc)(double), float* &preCalculatedCoefs){
+int cuda_omp_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, double(*coefFunc)(double), float* &preCalculatedCoefs){
     // Calculate size ratio
-    float sizeRatio = static_cast<float>(dstSize) / static_cast<float>(srcSize);
+    double sizeRatio = static_cast<double>(dstSize) / static_cast<double>(srcSize);
 
     // Calculate once
-    float pixelSupportDiv2 = pixelSupport / 2.f;
-    bool isDownScale = sizeRatio < 1.f;
-    float regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
-    float filterStep = isDownScale && operation != SWS_POINT ? 1.f / sizeRatio : 1.f;
+    double pixelSupportDiv2 = pixelSupport / 2.;
+    bool isDownScale = sizeRatio < 1.;
+    double regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
+    double filterStep = isDownScale && operation != SWS_POINT ? 1. / sizeRatio : 1.;
     int numCoefficients = isDownScale ? ceil(pixelSupport / sizeRatio) : pixelSupport;
     int numCoefficientsDiv2 = numCoefficients / 2;
 
     // Calculate number of lines of coefficients
-    int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min(srcSize, dstSize);
+    int preCalcCoefSize = isDownScale ? (lcm(srcSize, dstSize) / min(srcSize, dstSize)) * (static_cast<double>(srcSize) / static_cast<double>(dstSize)) : lcm(srcSize, dstSize) / min(srcSize, dstSize);
 
     // Initialize array
     preCalculatedCoefs = static_cast<float*>(malloc(preCalcCoefSize * numCoefficients * sizeof(float)));
@@ -1320,18 +1388,18 @@ int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int p
         int indexOffset = col * numCoefficients;
 
         // Original line index coordinate
-        float colOriginal = (static_cast<float>(col) + .5f) / sizeRatio;
+        double colOriginal = (static_cast<double>(col) + .5) / sizeRatio;
 
         // Discover source limit pixels
-        float nearPixel = colOriginal - filterStep;
-        float leftPixel = colOriginal - regionRadius;
+        double nearPixel = colOriginal - filterStep;
+        double leftPixel = colOriginal - regionRadius;
 
         // Discover offset to pixel of filter start
-        float offset = round(leftPixel) + .5f - leftPixel;
+        double offset = round(leftPixel) + .5 - leftPixel;
         // Calculate maximum distance to normalize distances
-        float maxDistance = colOriginal - nearPixel;
+        double maxDistance = colOriginal - nearPixel;
         // Calculate where filtering will start
-        float startPosition = leftPixel + offset;
+        double startPosition = leftPixel + offset;
 
         // Calculate coefficients
         float coefAcc = 0.f;
@@ -1462,38 +1530,9 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     // Check if is only a format conversion
     bool isOnlyFormatConversion = srcWidth == dstWidth && srcHeight == dstHeight;
     // Changes image pixel format only
-    if(isOnlyFormatConversion){
-        // Create source buffer in device
-        uint8_t** sourcePointers;
-        int* sourcePointersSizes;
-
-        // Create target buffer in device
-        uint8_t** targetPointers;
-        int* targetPointersSizes;
-
-        // Allocate source and target buffers in device
-        cudaAllocBuffers(sourcePointers, sourcePointersSizes, srcWidth, srcHeight, srcFormat);
-        cudaAllocBuffers(targetPointers, targetPointersSizes, dstWidth, dstHeight, dstFormat);
-
-        // Copy source data to device
-        cudaCopyBuffersToGPU(src->data, sourcePointers, sourcePointersSizes);
-
-        // Create launch parameters of format conversion kernel
-        pair<dim3, dim3> formatConversionLP = calculateConversionLP(dstWidth, dstHeight, srcFormat, dstFormat);
+    if(isOnlyFormatConversion && false){
         // Format conversion operation
-        cuda_formatConversion << <formatConversionLP.first, formatConversionLP.second >> > (dstWidth, dstHeight,
-            srcFormat, sourcePointers[0], sourcePointers[1], sourcePointers[2],
-            dstFormat, targetPointers[0], targetPointers[1], targetPointers[2]);
-
-        // Copy resulting data from device
-        cudaCopyBuffersFromGPU(dst->data, targetPointers, targetPointersSizes);
-
-        // Free used resources
-        freeCudaMemory(sourcePointers);
-        freeCudaMemory(targetPointers);
-        free(sourcePointersSizes);
-        free(targetPointersSizes);
-
+        cuda_omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
         // End resample operation
         return;
     }
@@ -1518,11 +1557,19 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     int numVCoefs = isDownScaleV ? ceil(pixelSupport / scaleHeightRatio) : pixelSupport;
     int numHCoefs = isDownScaleH ? ceil(pixelSupport / scaleWidthRatio) : pixelSupport;
 
+    // Chroma size discovery
+    float widthPerc = 1.f;
+    float heightPerc = 1.f;
+    if(scaleFormat == AV_PIX_FMT_YUV422P || scaleFormat == AV_PIX_FMT_YUV420P || scaleFormat == AV_PIX_FMT_YUV422PNORM)
+        widthPerc = .5f;
+    if(scaleFormat == AV_PIX_FMT_YUV420P)
+        heightPerc = .5f;
+
     // Precalculate coefficients
     float* vCoefsHost;
-    int vCoefsSize = cuda_preCalculateCoefficients(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefsHost);
+    int vCoefsSize = cuda_omp_preCalculateCoefficients(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefsHost);
     float* hCoefsHost;
-    int hCoefsSize = cuda_preCalculateCoefficients(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefsHost);
+    int hCoefsSize = cuda_omp_preCalculateCoefficients(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefsHost);
 
     // Allocate coefficients buffer in device
     float *vCoefsDevice, *hCoefsDevice;
@@ -1537,99 +1584,82 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     free(vCoefsHost);
     free(hCoefsHost);
 
-    // Create source buffer in device
-    uint8_t** sourcePointers;
-    int* sourcePointersSizes;
+    // Temporary buffer
+    uint8_t** forScalePointersHost;
+    // Allocate channel buffer pointers
+    allocBuffers(forScalePointersHost, srcWidth, srcHeight, scaleFormat);
+
+    // Resamples image to a supported format
+    cuda_omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, forScalePointersHost);
 
     // Create target buffer in device
-    uint8_t** forScalePointers;
-    int* forScalePointersSizes;
-
-    // Allocate source and target buffers in device
-    cudaAllocBuffers(sourcePointers, sourcePointersSizes, srcWidth, srcHeight, srcFormat);
-    cudaAllocBuffers(forScalePointers, forScalePointersSizes, srcWidth, srcHeight, scaleFormat);
+    uint8_t** forScalePointersDevice;
+    int* forScalePointersDeviceSizes;
+    // Allocate source buffer in device
+    cudaAllocBuffers(forScalePointersDevice, forScalePointersDeviceSizes, srcWidth, srcHeight, scaleFormat);
 
     // Copy source data to device
-    cudaCopyBuffersToGPU(src->data, sourcePointers, sourcePointersSizes);
+    cudaCopyBuffersToGPU(forScalePointersHost, forScalePointersDevice, forScalePointersDeviceSizes);
 
-    // Create launch parameters of format conversion kernel
-    pair<dim3, dim3> forScaleConversionLP = calculateConversionLP(srcWidth, srcHeight, srcFormat, scaleFormat);
-    // Format conversion operation
-    cuda_formatConversion << <forScaleConversionLP.first, forScaleConversionLP.second >> > (srcWidth, srcHeight,
-        srcFormat, sourcePointers[0], sourcePointers[1], sourcePointers[2],
-        scaleFormat, forScalePointers[0], forScalePointers[1], forScalePointers[2]);
-
-    // Free source data resources
-    freeCudaMemory(sourcePointers);
-    free(sourcePointersSizes);
+    // Free host memory
+    free2dBuffer(forScalePointersHost, 3);
 
     // Create target buffer in device
-    uint8_t** fromScalePointers;
-    int* fromScalePointersSizes;
-
-    // Allocate above buffer in device
-    cudaAllocBuffers(fromScalePointers, fromScalePointersSizes, dstWidth, dstHeight, scaleFormat);
-
-    // Chroma size discovery
-    float widthPerc = 1.f;
-    float heightPerc = 1.f;
-    if(scaleFormat == AV_PIX_FMT_YUV422P || scaleFormat == AV_PIX_FMT_YUV420P || scaleFormat == AV_PIX_FMT_YUV422PNORM)
-        widthPerc = .5f;
-    if(scaleFormat == AV_PIX_FMT_YUV420P)
-        heightPerc = .5f;
+    uint8_t** fromScalePointersDevice;
+    int* fromScalePointersDeviceSizes;
+    // Allocate source buffer in device
+    cudaAllocBuffers(fromScalePointersDevice, fromScalePointersDeviceSizes, dstWidth, dstHeight, scaleFormat);
 
     // Create launch parameters of resize kernel
-    pair<dim3, dim3> resizeLP = calculateResizeLP(dstWidth, dstHeight);
+    pair<dim3, dim3> resizeLP = calculateResizeLP(dstWidth, dstHeight, 32);
     // Recalculate launch parameters for chromas
     int heightChroma = static_cast<int>(dstHeight * heightPerc);
     int widthChroma = static_cast<int>(dstWidth * widthPerc);
-    pair<dim3, dim3> resizeChromaLP = calculateResizeLP(widthChroma, heightChroma);
+    pair<dim3, dim3> resizeChromaLP = calculateResizeLP(widthChroma, heightChroma, 32);
 
     // Apply the resizing operation to luma channel
-    cuda_resize << <resizeLP.first, resizeLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight,
-        scaleWidthRatio, scaleHeightRatio, forScalePointers[0], fromScalePointers[0], regionHRadius, regionVRadius, 0,
+    cuda_resize << <resizeLP.first, resizeLP.second>> > (srcWidth, srcHeight, dstWidth, dstHeight,
+        scaleWidthRatio, scaleHeightRatio, forScalePointersDevice[0], fromScalePointersDevice[0], regionHRadius, regionVRadius, 0,
         vCoefsSize, numVCoefs, vCoefsDevice, hCoefsSize, numHCoefs, hCoefsDevice);
-    
+
     // Apply the resizing operation to U chroma channel
-    cuda_resize << <resizeChromaLP.first, resizeChromaLP.second >> > (static_cast<int>(srcWidth * widthPerc), static_cast<int>(srcHeight * heightPerc), widthChroma, heightChroma,
-        scaleWidthRatio, scaleHeightRatio, forScalePointers[1], fromScalePointers[1], regionHRadius, regionVRadius, 1,
+    cuda_resize << <resizeChromaLP.first, resizeChromaLP.second>> > (static_cast<int>(srcWidth * widthPerc), static_cast<int>(srcHeight * heightPerc), widthChroma, heightChroma,
+        scaleWidthRatio, scaleHeightRatio, forScalePointersDevice[1], fromScalePointersDevice[1], regionHRadius, regionVRadius, 1,
         vCoefsSize, numVCoefs, vCoefsDevice, hCoefsSize, numHCoefs, hCoefsDevice);
 
     // Apply the resizing operation to V chroma channel
     cuda_resize << <resizeChromaLP.first, resizeChromaLP.second >> > (static_cast<int>(srcWidth * widthPerc), static_cast<int>(srcHeight * heightPerc), widthChroma, heightChroma,
-        scaleWidthRatio, scaleHeightRatio, forScalePointers[2], fromScalePointers[2], regionHRadius, regionVRadius, 2,
+        scaleWidthRatio, scaleHeightRatio, forScalePointersDevice[2], fromScalePointersDevice[2], regionHRadius, regionVRadius, 2,
         vCoefsSize, numVCoefs, vCoefsDevice, hCoefsSize, numHCoefs, hCoefsDevice);
 
+    // Synchronize GPU
+    cudaDeviceSynchronize();
+
     // Free used data resources
-    freeCudaMemory(forScalePointers);
-    free(forScalePointersSizes);
+    freeCudaMemory(forScalePointersDevice);
+    free(forScalePointersDeviceSizes);
+
+    // Temporary buffer
+    uint8_t** fromScalePointersHost;
+    // Allocate channel buffer pointers
+    allocBuffers(fromScalePointersHost, dstWidth, dstHeight, scaleFormat);
+
+    // Copy resulting data from device
+    cudaCopyBuffersFromGPU(fromScalePointersHost, fromScalePointersDevice, fromScalePointersDeviceSizes);
+
+    // Free used data resources
+    freeCudaMemory(fromScalePointersDevice);
+    free(fromScalePointersDeviceSizes);
 
     // Free coefficients in device
     cudaFree(vCoefsDevice);
     cudaFree(hCoefsDevice);
 
-    // Create target buffer in device
-    uint8_t** targetPointers;
-    int* targetPointersSizes;
-
-    // Allocate source and target buffers in device
-    cudaAllocBuffers(targetPointers, targetPointersSizes, dstWidth, dstHeight, dstFormat);
-
-    // Create launch parameters of format conversion kernel
-    pair<dim3, dim3> fromScaleConversionLP = calculateConversionLP(dstWidth, dstHeight, scaleFormat, dstFormat);
-    // Format conversion operation
-    cuda_formatConversion << <fromScaleConversionLP.first, fromScaleConversionLP.second >> > (dstWidth, dstHeight,
-        scaleFormat, fromScalePointers[0], fromScalePointers[1], fromScalePointers[2],
-        dstFormat, targetPointers[0], targetPointers[1], targetPointers[2]);
-
-    // Copy resulting data from device
-    cudaCopyBuffersFromGPU(dst->data, targetPointers, targetPointersSizes);
+    // Resamples image to target format
+    cuda_omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePointersHost, dstFormat, dst->data);
 
     // Free used resources
-    freeCudaMemory(fromScalePointers);
-    freeCudaMemory(targetPointers);
-    free(fromScalePointersSizes);
-    free(targetPointersSizes);
+    free2dBuffer(fromScalePointersHost, 3);
 
     // Sucess
     return;

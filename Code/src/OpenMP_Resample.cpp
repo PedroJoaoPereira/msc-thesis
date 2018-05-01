@@ -1181,7 +1181,7 @@ int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pi
     int numCoefficientsDiv2 = numCoefficients / 2;
 
     // Calculate number of lines of coefficients
-    int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min(srcSize, dstSize);
+    int preCalcCoefSize = isDownScale ? (lcm(srcSize, dstSize) / min(srcSize, dstSize)) * (static_cast<double>(srcSize) / static_cast<double>(dstSize)): lcm(srcSize, dstSize) / min(srcSize, dstSize);
 
     // Initialize array
     preCalculatedCoefs = static_cast<double*>(malloc(preCalcCoefSize * numCoefficients * sizeof(double)));
