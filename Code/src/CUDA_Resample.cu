@@ -1,8 +1,5 @@
 #include "CUDA_Resample.h"
 
-// global declaration of 2D float texture (visible for host and device code)
-texture<uint8_t, cudaTextureType2D, cudaReadModeElementType> tex;
-
 // Allocate image channels data buffers depending of the pixel format
 void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height, int pixelFormat){
     // Allocate channel buffer size
@@ -1498,7 +1495,7 @@ __global__ void cuda_resize(int srcWidth, int srcHeight, int dstWidth, int dstHe
             float weight = vCoef * hCoef;
 
             // Weighted color
-            acc += colorHolder * weight;
+            acc += float(colorHolder) * weight;
         }
     }
 
