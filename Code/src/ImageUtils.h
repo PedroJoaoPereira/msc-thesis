@@ -120,6 +120,9 @@ PrecisionType MitchellCoefficientDEPRECATED(PrecisionType val);
 template <class PrecisionType>
 PrecisionType LanczosCoefficientDEPRECATED(PrecisionType val);
 
+// Type cast content of array from uint8_t to float
+void arrayConvertToFloat(int size, uint8_t* src, float* dst);
+
 // Include template methods implementations
 #include "ImageUtils.hpp"
 

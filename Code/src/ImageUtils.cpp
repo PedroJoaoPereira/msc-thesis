@@ -103,7 +103,6 @@ bool isSupportedOperation(int operation){
     case SWS_POINT:
     case SWS_BILINEAR:
     case SWS_BICUBIC:
-    case SWS_LANCZOS:
         return true;
     }
 
@@ -127,7 +126,6 @@ bool isSupportedFormatDEPRECATED(int format){
     // Not a supported format
     return false;
 }
-
 
 // Allocate image channels data buffers depending of the pixel format
 void allocBuffers(uint8_t** &buffer, int width, int height, int pixelFormat){
@@ -325,4 +323,15 @@ double LanczosCoefficient(double val){
         return sin(val * M_PI) * sin(val * M_PI / A) / (val * val * M_PI * M_PI / A);
     } else
         return 0.;
+}
+
+// Type cast content of array from uint8_t to float
+void arrayConvertToFloat(int size, uint8_t* src, float* dst){
+    #pragma omp parallel for schedule(static)
+    for(int i = 0; i < size; i++){
+        union{ float f; uint32_t i; } u;
+        u.f = 32768.0f;
+        u.i |= src[i];
+        dst[i] = u.f - 32768.0f;
+    }
 }

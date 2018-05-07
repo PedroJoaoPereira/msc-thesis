@@ -10,6 +10,7 @@
 
 #include "ImageUtils.h"
 #include "MathMethods.h"
+#include "OpenMP_Utils.h"
 
 extern "C" {
     #define __STDC_CONSTANT_MACROS
