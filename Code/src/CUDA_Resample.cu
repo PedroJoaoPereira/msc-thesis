@@ -93,131 +93,54 @@ void cudaCopyBuffersFromGPU(uint8_t* targetBuffer[], uint8_t* gpuBuffer[], int* 
         cudaMemcpy(targetBuffer[2], gpuBuffer[2], bufferSize[2], cudaMemcpyDeviceToHost);
 }
 
-// Calculate launch parameters of format conversion kernel
-pair<dim3, dim3> calculateConversionLP(int width, int height, int srcPixelFormat, int dstPixelFormat){
-    // Variable with result launch parameters
-    pair<dim3, dim3> result;
-
-    // Discover dimensions value depending of the conversion
-    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422)
-        result.first = dim3(width * 2, height);
-    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P)
-        result.first = dim3(width / 2, height);
-    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210)
-        result.first = dim3(width * 2 / 12, height);
-
-    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422)
-        result.first = dim3(width / 2, height);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV422P)
-        result.first = dim3(width / 2, height);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210)
-        result.first = dim3(width / 6, height);
-
-    else if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_UYVY422)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV422P)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV420P)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_NV12)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_V210)
-        result.first = dim3(width / 6, height / 2);
-
-    else if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_UYVY422)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV422P)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV420P)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_NV12)
-        result.first = dim3(width / 2, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_V210)
-        result.first = dim3(width / 6, height / 2);
-
-    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422)
-        result.first = dim3(width / 6, height);
-    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422P)
-        result.first = dim3(width / 6, height);
-    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV420P)
-        result.first = dim3(width / 6, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_NV12)
-        result.first = dim3(width / 6, height / 2);
-    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_V210)
-        result.first = dim3(width / 3, height);
-    else if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422PNORM)
-        result.first = dim3(width / 6, height);
-
-    else if(srcPixelFormat == AV_PIX_FMT_YUV422PNORM && dstPixelFormat == AV_PIX_FMT_V210)
-        result.first = dim3(width / 6, height);
-
-    // Calculate thread size
-    int hDivisor = greatestDivisor(result.first.x, 16);
-    int vDivisor = greatestDivisor(result.first.y, 16);
-
-    // Assign thread size
-    result.second = dim3(hDivisor, vDivisor);
-
-    // Calculate block size
-    result.first.x /= hDivisor;
-    result.first.y /= vDivisor;
-
-    return result;
-}
-
 // Calculate launch parameters of resize kernel
-pair<dim3, dim3> calculateResizeLP(int width, int height, int initDivisor){
-    // Variable with result launch parameters
-    pair<dim3, dim3> result;
+pair<dim3, dim3> calculateResizeLP(int width, int height){
+    // Define the maximum number of thread dim1 size
+    int maxNumThreads = 32;
 
-    // Dimensions are always the same because only deal with planar formats
-    result.first = dim3(width, height);
+    // Find the thead size
+    int vThreadSize = min(maxNumThreads, greatestDivisor(height));
+    int hThreadSize = min(maxNumThreads, greatestDivisor(width));
 
-    // Calculate thread size
-    int hDivisor = greatestDivisor(result.first.x, initDivisor);
-    int vDivisor = greatestDivisor(result.first.y, initDivisor);
+    // Calculate the block size
+    int vBlockSize = height / vThreadSize;
+    int hBlockSize = width / hThreadSize;
 
-    // Assign thread size
-    result.second = dim3(hDivisor, vDivisor);
-
-    // Calculate block size
-    result.first.x /= hDivisor;
-    result.first.y /= vDivisor;
-
-    return result;
+    // Return valid launch parameters
+    return pair<dim3, dim3>(dim3(hBlockSize, vBlockSize), dim3(hThreadSize, vThreadSize));
 }
 
 // ------------------------------------------------------------------
 
 __host__ __device__
 float w0(float a){
-    //    return (1.0f/6.0f)*(-a*a*a + 3.0f*a*a - 3.0f*a + 1.0f);
-    return (1.0f / 6.0f)*(a*(a*(-a + 3.0f) - 3.0f) + 1.0f);   // optimized
+    //return (1.0f/6.0f)*(-a*a*a + 3.0f*a*a - 3.0f*a + 1.0f);
+    //return (1.0f / 6.0f)*(a*(a*(-a + 3.0f) - 3.0f) + 1.0f);   // optimized
+
+    return -0.6f*a*a*a + 1.2f*a*a - 0.6f*a;
 }
 
 __host__ __device__
 float w1(float a){
-    //    return (1.0f/6.0f)*(3.0f*a*a*a - 6.0f*a*a + 4.0f);
-    return (1.0f / 6.0f)*(a*a*(3.0f*a - 6.0f) + 4.0f);
+    //return (1.0f/6.0f)*(3.0f*a*a*a - 6.0f*a*a + 4.0f);
+    //return (1.0f / 6.0f)*(a*a*(3.0f*a - 6.0f) + 4.0f);
+
+    return 1.4f*a*a*a - 2.4f*a*a + 1.0f;
 }
 
 __host__ __device__
 float w2(float a){
-    //    return (1.0f/6.0f)*(-3.0f*a*a*a + 3.0f*a*a + 3.0f*a + 1.0f);
-    return (1.0f / 6.0f)*(a*(a*(-3.0f*a + 3.0f) + 3.0f) + 1.0f);
+    //return (1.0f/6.0f)*(-3.0f*a*a*a + 3.0f*a*a + 3.0f*a + 1.0f);
+    //return (1.0f / 6.0f)*(a*(a*(-3.0f*a + 3.0f) + 3.0f) + 1.0f);
+
+    return -1.4f*a*a*a + 1.8f*a*a + 0.6f*a;
 }
 
 __host__ __device__
 float w3(float a){
-    return (1.0f / 6.0f)*(a*a*a);
+    //return (1.0f / 6.0f)*(a*a*a);
+
+    return a*a*a*0.6f - 0.6f*a*a;
 }
 
 __device__ float g0(float a){
@@ -231,11 +154,21 @@ __device__ float g1(float a){
 // h0 and h1 are the two offset functions
 __device__ float h0(float a){
     // note +0.5 offset to compensate for CUDA linear filtering convention
-    return -1.0f + w1(a) / (w0(a) + w1(a));// +0.5f;
+    return -1.0f + w1(a) / (w0(a) + w1(a)) + .5f;
 }
 
 __device__ float h1(float a){
-    return 1.0f + w3(a) / (w2(a) + w3(a));// +0.5f;
+    return 1.0f + w3(a) / (w2(a) + w3(a)) + .5f;
+}
+
+__device__
+float cubicFilter(float x, float c0, float c1, float c2, float c3){
+    float r;
+    r = c0 * w0(x);
+    r += c1 * w1(x);
+    r += c2 * w2(x);
+    r += c3 * w3(x);
+    return r;
 }
 
 __global__ void cubicScaleY(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
@@ -248,13 +181,23 @@ __global__ void cubicScaleY(const int srcWidth, const int srcHeight, const int d
     // Original index coordinates
     float linOriginal = (lin + .5f) / scaleHeightRatio;
     float colOriginal = (col + .5f) / scaleWidthRatio;
+    
+    linOriginal -= .5f;
+    colOriginal -= .5f;
 
     float px = floor(colOriginal);
     float py = floor(linOriginal);
     float fx = colOriginal - px;
     float fy = linOriginal - py;
 
-    float g0x = g0(fx);
+    float r = cubicFilter(fy,
+        cubicFilter(fx, tex2D(texY, px - 1, py - 1), tex2D(texY, px, py - 1), tex2D(texY, px + 1, py - 1), tex2D(texY, px + 2, py - 1)),
+        cubicFilter(fx, tex2D(texY, px - 1, py), tex2D(texY, px, py), tex2D(texY, px + 1, py), tex2D(texY, px + 2, py)),
+        cubicFilter(fx, tex2D(texY, px - 1, py + 1), tex2D(texY, px, py + 1), tex2D(texY, px + 1, py + 1), tex2D(texY, px + 2, py + 1)),
+        cubicFilter(fx, tex2D(texY, px - 1, py + 2), tex2D(texY, px, py + 2), tex2D(texY, px + 1, py + 2), tex2D(texY, px + 2, py + 2))
+        );
+
+    /*float g0x = g0(fx);
     float g1x = g1(fx);
     float h0x = h0(fx);
     float h1x = h1(fx);
@@ -264,7 +207,7 @@ __global__ void cubicScaleY(const int srcWidth, const int srcHeight, const int d
     float r = g0(fy) * (g0x * tex2D(texY, px + h0x, py + h0y) +
         g1x * tex2D(texY, px + h1x, py + h0y)) +
         g1(fy) * (g0x * tex2D(texY, px + h0x, py + h1y) +
-            g1x * tex2D(texY, px + h1x, py + h1y));
+            g1x * tex2D(texY, px + h1x, py + h1y));*/
 
     // Assign color
     dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(r * 255.f));
@@ -403,6 +346,10 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         texV.filterMode = cudaFilterModeLinear;
     }
 
+    texY.filterMode = cudaFilterModePoint;
+    texU.filterMode = cudaFilterModePoint;
+    texV.filterMode = cudaFilterModePoint;
+
     // Free source data
     free2dBuffer(scaleFormatConverted, 3);
 
@@ -413,8 +360,8 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     cudaAllocBuffers(scaledDevice, scaledDeviceSizes, dstWidth, dstHeight, scaleFormat);
 
     // Calculate launch parameters
-    pair<dim3, dim3> lumaLP = calculateResizeLP(dstWidth, dstHeight, 32);
-    pair<dim3, dim3> chromaLP = calculateResizeLP(dstWidthChroma, dstHeightChroma, 32);
+    pair<dim3, dim3> lumaLP = calculateResizeLP(dstWidth, dstHeight);
+    pair<dim3, dim3> chromaLP = calculateResizeLP(dstWidthChroma, dstHeightChroma);
 
     // Scale each component
     if(operation != SWS_BICUBIC){

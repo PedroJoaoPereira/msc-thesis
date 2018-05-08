@@ -21,12 +21,14 @@ int min(int num1, int num2){
     return (num1 > num2) ? num2 : num1;
 }
 
-// Return the nearest value of num2 that is a divisor of num1
-int greatestDivisor(int num1, int num2){
-    int holder = num2;
+// Return the biggest binary divisor
+int greatestDivisor(int num){
+    if(num == 0)
+        return 0;
+    int holder = 1;
     // Find the greatest divisor
-    while(num1 % holder != 0)
-        holder--;
+    while((num & holder) == 0)
+        holder <<= 1;
 
     return holder;
 }
