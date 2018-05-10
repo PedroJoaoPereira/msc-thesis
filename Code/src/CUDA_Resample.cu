@@ -257,12 +257,16 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     }
 
     // Buffers for first format conversion
-    uint8_t* toScale;
-    cudaMallocHost((void **) &toScale, srcHeight * srcWidth + 2 * srcHeightChroma * srcWidthChroma);
+    uint8_t* pinnedHost;
+    cudaMallocHost((void **) &pinnedHost, srcHeight * srcWidth + 2 * srcHeightChroma * srcWidthChroma + dstHeight * dstWidth + 2 * dstHeightChroma * dstWidthChroma);
     uint8_t** toScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
-    toScalePtrs[0] = toScale;
+    toScalePtrs[0] = pinnedHost;
     toScalePtrs[1] = toScalePtrs[0] + srcHeight * srcWidth;
     toScalePtrs[2] = toScalePtrs[1] + srcHeightChroma * srcWidthChroma;
+    uint8_t** fromScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    fromScalePtrs[0] = toScalePtrs[2] + srcHeightChroma * srcWidthChroma;
+    fromScalePtrs[1] = fromScalePtrs[0] + dstHeight * dstWidth;
+    fromScalePtrs[2] = fromScalePtrs[1] + dstHeightChroma * dstWidthChroma;
 
     // Format conversion operation
     omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, toScalePtrs);
@@ -322,14 +326,6 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     int offsetFrom0 = scaledDeviceSizes[0];
     int offsetFrom1 = offsetFrom0 + scaledDeviceSizes[1];
 
-    // Buffers for last format conversion
-    uint8_t* fromScale;
-    cudaMallocHost((void **) &fromScale, dstHeight * dstWidth + 2 * dstHeightChroma * dstWidthChroma);
-    uint8_t** fromScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
-    fromScalePtrs[0] = fromScale;
-    fromScalePtrs[1] = fromScalePtrs[0] + dstHeight * dstWidth;
-    fromScalePtrs[2] = fromScalePtrs[1] + dstHeightChroma * dstWidthChroma;
-
     // Scale each component
     if(operation == SWS_POINT || operation == SWS_BILINEAR){
         cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
@@ -361,7 +357,6 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     cudaDeviceSynchronize();
 
     // Free used resources
-    free(toScalePtrs);
     free(scaledDeviceSizes);
 
     cudaFree(scaledDevice);
@@ -370,14 +365,15 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     cudaFreeArray(uSrc);
     cudaFreeArray(vSrc);
     
-    cudaFreeHost(toScale);
+    
 
     // Format conversion operation
     omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
 
     // Free used resources
+    cudaFreeHost(pinnedHost);
+    free(toScalePtrs);
     free(fromScalePtrs);
-    cudaFreeHost(fromScale);
 
     // Sucess
     return;

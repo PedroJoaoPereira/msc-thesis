@@ -114,7 +114,7 @@ int main(){
     scaleOperations.push_back(SWS_BICUBIC);
 
     // Test procedures
-    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 1);
+    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 100);
 
     // Success
     return 0;
