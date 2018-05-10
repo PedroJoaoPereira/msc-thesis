@@ -103,6 +103,7 @@ bool isSupportedOperation(int operation){
     case SWS_POINT:
     case SWS_BILINEAR:
     case SWS_BICUBIC:
+    case SWS_LANCZOS:
         return true;
     }
 
