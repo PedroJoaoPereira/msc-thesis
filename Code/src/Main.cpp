@@ -118,8 +118,8 @@ int main(){
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_UYVY422));
 
-    scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV422P));
-    scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV422P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
     scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_YUV422P));
 
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV420P));
@@ -131,17 +131,17 @@ int main(){
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_NV12));
 
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_V210));
-    scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_V210));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_V210));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_V210));
 
     // Create scaling operations
     vector<int> scaleOperations = vector<int>();
-    //scaleOperations.push_back(SWS_POINT);
-    //scaleOperations.push_back(SWS_BILINEAR);
+    scaleOperations.push_back(SWS_POINT);
+    scaleOperations.push_back(SWS_BILINEAR);
     scaleOperations.push_back(SWS_BICUBIC);
 
     // Test procedures
-    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 10);
+    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 350);
 
     // Success
     return 0;

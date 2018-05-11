@@ -115,12 +115,12 @@ void testFFMPEG(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vecto
 }
 
 // Test cuda procedure
-int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation) {
+int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation, int nTimes) {
     // Prepare output frame
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = cuda_resample(inImg.frame, outImg.frame, operation);
+    int executionTime = cuda_resample(inImg.frame, outImg.frame, operation, nTimes);
     if (executionTime < 0) {
         cout << "[CUDA] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
@@ -134,21 +134,8 @@ int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation) {
 }
 
 int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes) {
-    // Temporary variable
-    long long acc = 0;
-
-    // Repeat nTimes
-    for (int ithTime = 0; ithTime < nTimes; ithTime++) {
-        int tempExecutionTime = testCUDASingle(inImg, outImg, operation);
-        if (tempExecutionTime < 0)
-            return -1;
-
-        // Increment execution time accumulator
-        acc += tempExecutionTime;
-    }
-
     // Average execution time
-    int avgExecutionTime = acc / nTimes;
+    int avgExecutionTime = testCUDASingle(inImg, outImg, operation, nTimes) / nTimes;
 
     // Display results
     cout << "[CUDA] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
