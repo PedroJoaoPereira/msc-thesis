@@ -7,14 +7,15 @@
 #include "ImageUtils.h"
 
 extern "C"{
-    #define __STDC_CONSTANT_MACROS
-    #include <libavformat/avformat.h>
+#define __STDC_CONSTANT_MACROS
+#include <libavformat/avformat.h>
 }
 
 using namespace std;
 
 class ImageClass{
-    public:
+public:
+    bool isInitialized;
     // Variables
     string fileName;
     int width;
