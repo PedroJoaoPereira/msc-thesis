@@ -32,30 +32,6 @@ void cudaAllocBuffers(uint8_t* &buffer, int* &bufferSize, int width, int height,
     cudaMalloc((void **) &buffer, bufferSize[0] + bufferSize[1] + bufferSize[2]);
 }
 
-// Copy data from host to device
-void cudaCopyBuffersToGPU(uint8_t* srcBuffer[], uint8_t* gpuBuffer[], int* &bufferSize){
-    // First channel
-    cudaMemcpy(gpuBuffer[0], srcBuffer[0], bufferSize[0], cudaMemcpyHostToDevice);
-
-    // Copy chroma channels if they exist
-    if(bufferSize[1] != 0)
-        cudaMemcpy(gpuBuffer[1], srcBuffer[1], bufferSize[1], cudaMemcpyHostToDevice);
-    if(bufferSize[2] != 0)
-        cudaMemcpy(gpuBuffer[2], srcBuffer[2], bufferSize[2], cudaMemcpyHostToDevice);
-}
-
-// Copy data from device to host
-void cudaCopyBuffersFromGPU(uint8_t* targetBuffer[], uint8_t* gpuBuffer[], int* &bufferSize){
-    // First channel
-    cudaMemcpy(targetBuffer[0], gpuBuffer[0], bufferSize[0], cudaMemcpyDeviceToHost);
-
-    // Copy chroma channels if they exist
-    if(bufferSize[1] != 0)
-        cudaMemcpy(targetBuffer[1], gpuBuffer[1], bufferSize[1], cudaMemcpyDeviceToHost);
-    if(bufferSize[2] != 0)
-        cudaMemcpy(targetBuffer[2], gpuBuffer[2], bufferSize[2], cudaMemcpyDeviceToHost);
-}
-
 // Calculate launch parameters of resize kernel
 pair<dim3, dim3> calculateResizeLP(int width, int height){
     // Define the maximum number of thread dim1 size
@@ -71,6 +47,100 @@ pair<dim3, dim3> calculateResizeLP(int width, int height){
 
     // Return valid launch parameters
     return pair<dim3, dim3>(dim3(hBlockSize, vBlockSize), dim3(hThreadSize, vThreadSize));
+}
+
+// ------------------------------------------------------------------
+
+uint8_t* pinnedHost;
+cudaChannelFormatDesc channelDesc;
+cudaArray *ySrc, *uSrc, *vSrc;
+uint8_t* scaledDevice;
+int* scaledDeviceSizes;
+cudaStream_t streamY, streamU, streamV;
+
+// Initializes data
+void cuda_init(AVFrame* src, AVFrame* dst, int operation){
+    // Get standard supported pixel format in scaling
+    int scaleFormat = getScaleFormat(src->format, dst->format);
+
+    // Calculate the size of the chroma components
+    int srcHeightChroma = src->height;
+    int srcWidthChroma = src->width;
+    int dstHeightChroma = dst->height;
+    int dstWidthChroma = dst->width;
+    if(scaleFormat == AV_PIX_FMT_YUV422P || scaleFormat == AV_PIX_FMT_YUV420P || scaleFormat == AV_PIX_FMT_YUV422PNORM){
+        srcWidthChroma /= 2;
+        dstWidthChroma /= 2;
+    }
+    if(scaleFormat == AV_PIX_FMT_YUV420P){
+        srcHeightChroma /= 2;
+        dstHeightChroma /= 2;
+    }
+
+    // Allocate host pinned memory
+    cudaMallocHost((void **) &pinnedHost, src->height * src->width + 2 * srcHeightChroma * srcWidthChroma + dst->height * dst->width + 2 * dstHeightChroma * dstWidthChroma);
+
+    // Create channel texture descriptor
+    channelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
+
+    // Set configurations of texture memory
+    texY.addressMode[0] = cudaAddressModeClamp;
+    texY.addressMode[1] = cudaAddressModeClamp;
+    texY.normalized = false;
+    texU.addressMode[0] = cudaAddressModeClamp;
+    texU.addressMode[1] = cudaAddressModeClamp;
+    texU.normalized = false;
+    texV.addressMode[0] = cudaAddressModeClamp;
+    texV.addressMode[1] = cudaAddressModeClamp;
+    texV.normalized = false;
+
+    // Set interpolation method
+    if(operation == SWS_BILINEAR){
+        texY.filterMode = cudaFilterModeLinear;
+        texU.filterMode = cudaFilterModeLinear;
+        texV.filterMode = cudaFilterModeLinear;
+    } else{
+        texY.filterMode = cudaFilterModePoint;
+        texU.filterMode = cudaFilterModePoint;
+        texV.filterMode = cudaFilterModePoint;
+    }
+
+    // Create a 2d cuda array for each source component
+    cudaMallocArray(&ySrc, &channelDesc, src->width, src->height);
+    cudaMallocArray(&uSrc, &channelDesc, srcWidthChroma, srcHeightChroma);
+    cudaMallocArray(&vSrc, &channelDesc, srcWidthChroma, srcHeightChroma);
+
+    // Bind textures to device memory
+    cudaBindTextureToArray(&texY, ySrc, &channelDesc);
+    cudaBindTextureToArray(&texU, uSrc, &channelDesc);
+    cudaBindTextureToArray(&texV, vSrc, &channelDesc);
+
+    // Allocate source buffer in device
+    cudaAllocBuffers(scaledDevice, scaledDeviceSizes, dst->width, dst->height, scaleFormat);
+
+    // Create cuda streams for concurrent execution of kernels
+    cudaStreamCreate(&streamY);
+    cudaStreamCreate(&streamU);
+    cudaStreamCreate(&streamV);
+}
+
+// Free resources
+void cuda_finish(){
+    // Delete cuda arrays
+    cudaFreeArray(ySrc);
+    cudaFreeArray(uSrc);
+    cudaFreeArray(vSrc);
+
+    // Free used resources
+    cudaFree(scaledDevice);
+    free(scaledDeviceSizes);
+
+    cudaStreamDestroy(streamY);
+    cudaStreamDestroy(streamU);
+    cudaStreamDestroy(streamV);
+
+    // Deallocate host pinned memory
+    cudaFreeHost(pinnedHost);
 }
 
 // ------------------------------------------------------------------
@@ -295,16 +365,12 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
 
 // Initializes memory if needed and prepares variables
 void cuda_resampleStarter(AVFrame* src, AVFrame* dst, int operation,
-    int srcWidth, int srcHeight, int dstWidth, int dstHeight, int srcFormat, int dstFormat,
-    int nTimes){
+    int srcWidth, int srcHeight, int dstWidth, int dstHeight, int srcFormat, int dstFormat){
 
     // Check if is only a format conversion
     if(srcWidth == dstWidth && srcHeight == dstHeight){
-        // Operate over frame n times
-        for(int nthTime = 0; nthTime < nTimes; nthTime++){
-            // Format conversion operation
-            omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
-        }
+        // Format conversion operation
+        omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
         // End resample operation
         return;
     }
@@ -326,88 +392,17 @@ void cuda_resampleStarter(AVFrame* src, AVFrame* dst, int operation,
         dstHeightChroma /= 2;
     }
 
-    // Allocate host pinned memory
-    uint8_t* pinnedHost;
-    cudaMallocHost((void **) &pinnedHost, srcHeight * srcWidth + 2 * srcHeightChroma * srcWidthChroma + dstHeight * dstWidth + 2 * dstHeightChroma * dstWidthChroma);
-
-    // Create channel texture descriptor
-    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
-
-    // Set configurations of texture memory
-    texY.addressMode[0] = cudaAddressModeClamp;
-    texY.addressMode[1] = cudaAddressModeClamp;
-    texY.normalized = false;
-    texU.addressMode[0] = cudaAddressModeClamp;
-    texU.addressMode[1] = cudaAddressModeClamp;
-    texU.normalized = false;
-    texV.addressMode[0] = cudaAddressModeClamp;
-    texV.addressMode[1] = cudaAddressModeClamp;
-    texV.normalized = false;
-
-    // Set interpolation method
-    if(operation == SWS_BILINEAR){
-        texY.filterMode = cudaFilterModeLinear;
-        texU.filterMode = cudaFilterModeLinear;
-        texV.filterMode = cudaFilterModeLinear;
-    } else{
-        texY.filterMode = cudaFilterModePoint;
-        texU.filterMode = cudaFilterModePoint;
-        texV.filterMode = cudaFilterModePoint;
-    }
-
-    // Create a 2d cuda array for each source component
-    cudaArray *ySrc, *uSrc, *vSrc;
-    cudaMallocArray(&ySrc, &channelDesc, srcWidth, srcHeight);
-    cudaMallocArray(&uSrc, &channelDesc, srcWidthChroma, srcHeightChroma);
-    cudaMallocArray(&vSrc, &channelDesc, srcWidthChroma, srcHeightChroma);
-
-    // Bind textures to device memory
-    cudaBindTextureToArray(&texY, ySrc, &channelDesc);
-    cudaBindTextureToArray(&texU, uSrc, &channelDesc);
-    cudaBindTextureToArray(&texV, vSrc, &channelDesc);
-
-    // Create target buffer in device
-    uint8_t* scaledDevice;
-    int* scaledDeviceSizes;
-    // Allocate source buffer in device
-    cudaAllocBuffers(scaledDevice, scaledDeviceSizes, dstWidth, dstHeight, scaleFormat);
-
-    // Create cuda streams for concurrent execution of kernels
-    cudaStream_t streamY, streamU, streamV;
-    cudaStreamCreate(&streamY);
-    cudaStreamCreate(&streamU);
-    cudaStreamCreate(&streamV);
-
-    // Operate over frame n times
-    for(int nthTime = 0; nthTime < nTimes; nthTime++){
-        // Apply the scaling operation
-        cuda_resample_aux(src, dst, operation,
-            srcWidth, srcHeight, dstWidth, dstHeight,
-            srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma,
-            srcFormat, dstFormat, scaleFormat,
-            pinnedHost, channelDesc, ySrc, uSrc, vSrc,
-            scaledDevice, scaledDeviceSizes, streamY, streamU, streamV);
-    }
-
-    // Delete cuda arrays
-    cudaFreeArray(ySrc);
-    cudaFreeArray(uSrc);
-    cudaFreeArray(vSrc);
-
-    // Free used resources
-    cudaFree(scaledDevice);
-    free(scaledDeviceSizes);
-
-    cudaStreamDestroy(streamY);
-    cudaStreamDestroy(streamU);
-    cudaStreamDestroy(streamV);
-
-    // Deallocate host pinned memory
-    cudaFreeHost(pinnedHost);
+    // Apply the scaling operation
+    cuda_resample_aux(src, dst, operation,
+        srcWidth, srcHeight, dstWidth, dstHeight,
+        srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma,
+        srcFormat, dstFormat, scaleFormat,
+        pinnedHost, channelDesc, ySrc, uSrc, vSrc,
+        scaledDevice, scaledDeviceSizes, streamY, streamU, streamV);
 }
 
 // Wrapper for the cuda resample operation method
-int cuda_resample(AVFrame* src, AVFrame* dst, int operation, int nTimes){
+int cuda_resample(AVFrame* src, AVFrame* dst, int operation){
     // Access once
     int srcWidth = src->width, srcHeight = src->height;
     int srcFormat = src->format;
@@ -482,7 +477,7 @@ int cuda_resample(AVFrame* src, AVFrame* dst, int operation, int nTimes){
     initTime = high_resolution_clock::now();
 
     // Apply operation
-    cuda_resampleStarter(src, dst, operation, srcWidth, srcHeight, dstWidth, dstHeight, srcFormat, dstFormat, nTimes);
+    cuda_resampleStarter(src, dst, operation, srcWidth, srcHeight, dstWidth, dstHeight, srcFormat, dstFormat);
 
     // Stop counting operation execution time
     stopTime = high_resolution_clock::now();
