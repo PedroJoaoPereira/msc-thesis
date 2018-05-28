@@ -293,7 +293,8 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
     int srcWidthChroma, int srcHeightChroma, int dstWidthChroma, int dstHeightChroma,
     int srcFormat, int dstFormat, int scaleFormat,     
     uint8_t* &pinnedHost, cudaChannelFormatDesc &channelDesc, cudaArray* &ySrc, cudaArray* &uSrc, cudaArray* &vSrc,
-    uint8_t* &scaledDevice, int* &scaledDeviceSizes, cudaStream_t &streamY, cudaStream_t &streamU, cudaStream_t &streamV){
+    uint8_t* &scaledDevice, int* &scaledDeviceSizes, cudaStream_t &streamY, cudaStream_t &streamU, cudaStream_t &streamV,
+    double* &times){
 
     // Get scale ratios
     float scaleHeightRatio = static_cast<float>(dstHeight) / static_cast<float>(srcHeight);
@@ -309,8 +310,14 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
     fromScalePtrs[1] = fromScalePtrs[0] + dstHeight * dstWidth;
     fromScalePtrs[2] = fromScalePtrs[1] + dstHeightChroma * dstWidthChroma;
 
+    // Time variables
+    high_resolution_clock::time_point initTime, stopTime;
+
     // Format conversion operation
+    initTime = high_resolution_clock::now();
     omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, toScalePtrs);
+    stopTime = high_resolution_clock::now();
+    times[0] = duration_cast<microseconds>(stopTime - initTime).count() * 1.;
 
     // Calculate launch parameters
     pair<dim3, dim3> lumaLP = calculateResizeLP(dstWidth, dstHeight);
@@ -321,6 +328,7 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
     int offsetFrom1 = offsetFrom0 + scaledDeviceSizes[1];
 
     // Scale each component
+    initTime = high_resolution_clock::now();
     if(operation == SWS_POINT || operation == SWS_BILINEAR){
         cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
         scaleTexY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
@@ -349,12 +357,17 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
 
     // Synchronize device
     cudaDeviceSynchronize();
+    stopTime = high_resolution_clock::now();
+    times[1] = duration_cast<microseconds>(stopTime - initTime).count() * 1.;
 
     // Free used resources
     free(toScalePtrs);
 
     // Format conversion operation
+    initTime = high_resolution_clock::now();
     omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
+    stopTime = high_resolution_clock::now();
+    times[2] = duration_cast<microseconds>(stopTime - initTime).count() * 1.;
 
     // Free used resources    
     free(fromScalePtrs);
@@ -365,7 +378,8 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
 
 // Initializes memory if needed and prepares variables
 void cuda_resampleStarter(AVFrame* src, AVFrame* dst, int operation,
-    int srcWidth, int srcHeight, int dstWidth, int dstHeight, int srcFormat, int dstFormat){
+    int srcWidth, int srcHeight, int dstWidth, int dstHeight, int srcFormat, int dstFormat,
+    double* &times){
 
     // Check if is only a format conversion
     if(srcWidth == dstWidth && srcHeight == dstHeight){
@@ -398,11 +412,12 @@ void cuda_resampleStarter(AVFrame* src, AVFrame* dst, int operation,
         srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma,
         srcFormat, dstFormat, scaleFormat,
         pinnedHost, channelDesc, ySrc, uSrc, vSrc,
-        scaledDevice, scaledDeviceSizes, streamY, streamU, streamV);
+        scaledDevice, scaledDeviceSizes, streamY, streamU, streamV,
+        times);
 }
 
 // Wrapper for the cuda resample operation method
-int cuda_resample(AVFrame* src, AVFrame* dst, int operation){
+int cuda_resample(AVFrame* src, AVFrame* dst, int operation, double* &times){
     // Access once
     int srcWidth = src->width, srcHeight = src->height;
     int srcFormat = src->format;
@@ -469,22 +484,9 @@ int cuda_resample(AVFrame* src, AVFrame* dst, int operation){
         return -1;
     }
 
-    // Variables used
-    int duration = -1;
-    high_resolution_clock::time_point initTime, stopTime;
-
-    // Start counting operation execution time
-    initTime = high_resolution_clock::now();
-
     // Apply operation
-    cuda_resampleStarter(src, dst, operation, srcWidth, srcHeight, dstWidth, dstHeight, srcFormat, dstFormat);
-
-    // Stop counting operation execution time
-    stopTime = high_resolution_clock::now();
-
-    // Calculate the execution time
-    duration = duration_cast<microseconds>(stopTime - initTime).count();
+    cuda_resampleStarter(src, dst, operation, srcWidth, srcHeight, dstWidth, dstHeight, srcFormat, dstFormat, times);
 
     // Return execution time of the scaling operation
-    return duration;
+    return 0;
 }

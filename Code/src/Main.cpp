@@ -15,9 +15,9 @@ using namespace std;
 int main(){
 
     // IMAGE RESOLUTIONS -----------------------------
-    // FUHD   - 7680 x 4320
+    // 8k     - 7680 x 4320
     // UHD    - 3840 x 2160
-    // 2k     - 2048 x 1080
+    // WQHD   - 2560 x 1440
     // 1080p  - 1920 x 1080
     // 720p   - 1280 x 720
     // 576p   - 1024 x 576
@@ -90,9 +90,9 @@ int main(){
 
     // Create format conersions operations
     vector<int> formatConversionOperations = vector<int>();
-    formatConversionOperations.push_back(SWS_POINT);
+    //formatConversionOperations.push_back(SWS_POINT);
 
-    //testAll(allImgs, formatConversionOutImgs, formatConversionOperations, 1000);
+    //testAll(allImgs, formatConversionOutImgs, formatConversionOperations, 10);
 
     // TEST SCALING -------------------------------------------------
 
@@ -102,41 +102,37 @@ int main(){
     //scaleInImgs.push_back(img_yuv422p_1920x1080);
     //scaleInImgs.push_back(img_yuv420p_1920x1080);
     //scaleInImgs.push_back(img_nv12_1920x1080);
-    //scaleInImgs.push_back(img_v210_1920x1080);
 
     //scaleInImgs.push_back(img_uyvy422_7680x4320);
     //scaleInImgs.push_back(img_yuv422p_7680x4320);
     //scaleInImgs.push_back(img_yuv420p_7680x4320);
     //scaleInImgs.push_back(img_nv12_7680x4320);
-    //scaleInImgs.push_back(img_v210_7680x4320);
 
     // Create scale output images
     vector<ImageClass*> scaleOutImgs = vector<ImageClass*>();
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1024, 576, AV_PIX_FMT_UYVY422));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_UYVY422));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2048, 1080, AV_PIX_FMT_UYVY422));
+    scaleOutImgs.push_back(new ImageClass("imgs/results/", 2560, 1440, AV_PIX_FMT_UYVY422));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
-    scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_UYVY422));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
 
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1024, 576, AV_PIX_FMT_YUV422P));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV422P));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2048, 1080, AV_PIX_FMT_YUV422P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2560, 1440, AV_PIX_FMT_YUV422P));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_YUV422P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
 
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1024, 576, AV_PIX_FMT_YUV420P));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV420P));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2048, 1080, AV_PIX_FMT_YUV420P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2560, 1440, AV_PIX_FMT_YUV420P));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV420P));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_YUV420P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
 
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1024, 576, AV_PIX_FMT_NV12));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_NV12));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2048, 1080, AV_PIX_FMT_NV12));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2560, 1440, AV_PIX_FMT_NV12));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_NV12));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_NV12));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
 
     // Create scaling operations
     vector<int> scaleOperations = vector<int>();
@@ -145,7 +141,7 @@ int main(){
     scaleOperations.push_back(SWS_BICUBIC);
 
     // Test procedures
-    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 1);
+    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 100);
 
     // Success
     return 0;
