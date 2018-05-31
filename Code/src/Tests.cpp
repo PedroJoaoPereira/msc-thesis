@@ -89,10 +89,17 @@ int testFFMPEGAverage(ImageClass &inImg, ImageClass outImg, int operation, int n
     cout << "\t\tOperation: " << operationToString(operation) << endl;
     cout << "\tExecution Time ==> " << avgExecutionTime / 1000. << " ms" << endl << endl;
 
+    //cout << operationToString(operation) << ",";
+    //cout << pixelFormatToString(inImg.pixelFormat) << "," << pixelFormatToString(outImg.pixelFormat) << ",";
+    //cout << outImg.width << "x" << outImg.height << ",";
+    //cout << avgExecutionTime / 1000. << ",";
+
     // Write image to file
     outImg.fileName += "[FFMPEG]" + operationToString(operation) + "-" + pixelFormatToString(inImg.pixelFormat) + "-" + pixelFormatToString(outImg.pixelFormat);
     outImg.fileName += "-" + to_string(inImg.width) + "x" + to_string(inImg.height) + "-" + to_string(outImg.width) + "x" + to_string(outImg.height) + ".yuv";
     outImg.writeImage();
+
+    outImg.freeResources();
 
     // Success
     return avgExecutionTime;
@@ -161,6 +168,11 @@ int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTi
         secondConversion += times[2];
     }
 
+    // Write image to file
+    outImg.fileName += "[CUDA]" + operationToString(operation) + "-" + pixelFormatToString(inImg.pixelFormat) + "-" + pixelFormatToString(outImg.pixelFormat);
+    outImg.fileName += "-" + to_string(inImg.width) + "x" + to_string(inImg.height) + "-" + to_string(outImg.width) + "x" + to_string(outImg.height) + ".yuv";
+    outImg.writeImage();
+
     // Free used resources by device
     cuda_finish();
 
@@ -177,21 +189,26 @@ int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTi
             finishAcc += duration_cast<microseconds>(stopTime - initTime).count();
         }
 
+    outImg.freeResources();
+
     // Display results
     cout << "[CUDA] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
     cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
     cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
     cout << "\t\tOperation: " << operationToString(operation) << endl;
-    cout << "\t1st Conversion Time ==> " << (firstConvertion / nTimes) / 1000. << " ms" << endl;
-    cout << "\tData and Resample Time ==> " << (transferAndResample / nTimes) / 1000. << " ms" << endl;
-    cout << "\t2nd Conversion Time ==> " << (secondConversion / nTimes) / 1000. << " ms" << endl;
+    cout << "\tExecution Time ==> " << (firstConvertion / nTimes + transferAndResample / nTimes + secondConversion / nTimes) / 1000. << " ms" << endl;
+    cout << "\t\t1st Conversion Time ==> " << (firstConvertion / nTimes) / 1000. << " ms" << endl;
+    cout << "\t\tData and Resample Time ==> " << (transferAndResample / nTimes) / 1000. << " ms" << endl;
+    cout << "\t\t2nd Conversion Time ==> " << (secondConversion / nTimes) / 1000. << " ms" << endl;
     cout << "\tInit time: " << (initAcc / nTimes) / 1000. << " ms" << endl;
     cout << "\tFinish time: " << (finishAcc / nTimes) / 1000. << " ms" << endl << endl;
 
-    // Write image to file
-    outImg.fileName += "[CUDA]" + operationToString(operation) + "-" + pixelFormatToString(inImg.pixelFormat) + "-" + pixelFormatToString(outImg.pixelFormat);
-    outImg.fileName += "-" + to_string(inImg.width) + "x" + to_string(inImg.height) + "-" + to_string(outImg.width) + "x" + to_string(outImg.height) + ".yuv";
-    outImg.writeImage();
+    //cout << (firstConvertion / nTimes + transferAndResample / nTimes + secondConversion / nTimes) / 1000. << ",";
+    //cout << (initAcc / nTimes) / 1000. << ",";
+    //cout << (finishAcc / nTimes) / 1000. << ",";
+    //cout << (firstConvertion / nTimes) / 1000. << ",";
+    //cout << (secondConversion / nTimes) / 1000. << ",";
+    //cout << (transferAndResample / nTimes) / 1000. << "," << " ," << " ," << " ," << endl;
 
     // Success
     return 1;
@@ -213,6 +230,24 @@ void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<
 
 // Test all procedures
 void testAll(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
-    testFFMPEG(inImgs, outImgs, operations, nTimes);
-    testCUDA(inImgs, outImgs, operations, nTimes);
+    //testFFMPEG(inImgs, outImgs, operations, nTimes);
+    //testCUDA(inImgs, outImgs, operations, nTimes);
+
+    // For each input image
+    for(int indexIn = 0; indexIn < inImgs.size(); indexIn++){
+        // For each operation
+        for(int indexOp = 0; indexOp < operations.size(); indexOp++){
+            // For each output image
+            for(int indexOut = 0; indexOut < outImgs.size(); indexOut++){
+                if(!((*inImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_V210 || (*outImgs.at(indexOut)).pixelFormat == AV_PIX_FMT_V210))
+                    if(testFFMPEGAverage((*inImgs.at(indexIn)), (*outImgs.at(indexOut)), operations.at(indexOp), nTimes) < 0)
+                        return;
+
+                if(testCUDAAverage((*inImgs.at(indexIn)), (*outImgs.at(indexOut)), operations.at(indexOp), nTimes) < 0)
+                    return;
+            }
+        }
+    }
+
+
 }

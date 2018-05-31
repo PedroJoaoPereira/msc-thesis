@@ -15,7 +15,8 @@ int readImageFromFile(string fileName, uint8_t** dataBuffer){
     rewind(inputFile);
 
     // Allocate memory to contain the whole file:
-    *dataBuffer = (uint8_t*) malloc(sizeof(uint8_t) * inputFileSize);
+    //*dataBuffer = (uint8_t*) malloc(sizeof(uint8_t) * inputFileSize);
+    cudaMallocHost((void **) dataBuffer, inputFileSize);
     if(!*dataBuffer){
         fclose(inputFile);
         cout << "Could not allocate the buffer memory!" << endl;
@@ -83,9 +84,9 @@ int createImageDataBuffer(int width, int height, int pixelFormat, uint8_t** data
 
     // Allocate buffer of the frame
     if(pixelFormat == AV_PIX_FMT_V210)
-        *dataBuffer = static_cast<uint8_t*>(malloc(((width + 47) / 48) * 128 * height * sizeof(uint8_t)));
+        cudaMallocHost((void **) dataBuffer, ((width + 47) / 48) * 128 * height * sizeof(uint8_t));
     else
-        *dataBuffer = static_cast<uint8_t*>(malloc(numElements * sizeof(uint8_t)));
+        cudaMallocHost((void **) dataBuffer, numElements * sizeof(uint8_t));
     if(!*dataBuffer){
         cout << "Could not allocate the buffer memory!" << endl;
         return -1;
@@ -142,7 +143,7 @@ ImageClass::ImageClass(string fileName, int width, int height, int pixelFormat){
 void ImageClass::loadImage(){
     if(isInitialized){
         av_frame_free(&frame);
-        free(frameBuffer);
+        cudaFreeHost(frameBuffer);
     } else
         isInitialized = true;
 
@@ -152,7 +153,7 @@ void ImageClass::loadImage(){
 
     // Initialize frame
     if(initializeAVFrame(&frameBuffer, width, height, pixelFormat, &frame) < 0){
-        free(frameBuffer);
+        cudaFreeHost(frameBuffer);
     }
 }
 
@@ -160,7 +161,7 @@ void ImageClass::loadImage(){
 void ImageClass::initFrame(){
     if(isInitialized){
         av_frame_free(&frame);
-        free(frameBuffer);
+        cudaFreeHost(frameBuffer);
     }else
         isInitialized = true;
 
@@ -170,7 +171,7 @@ void ImageClass::initFrame(){
 
     // Initialize frame
     if(initializeAVFrame(&frameBuffer, width, height, pixelFormat, &frame) < 0){
-        free(frameBuffer);
+        cudaFreeHost(frameBuffer);
     }
 }
 
@@ -178,7 +179,10 @@ void ImageClass::initFrame(){
 void ImageClass::writeImage(){
     // Write image to file
     writeImageToFile(fileName, &frame);
+}
 
+// Free image resources
+void ImageClass::freeResources(){
     av_frame_free(&frame);
-    free(frameBuffer);
+    cudaFreeHost(frameBuffer);
 }

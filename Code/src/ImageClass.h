@@ -4,6 +4,8 @@
 #include <iostream>
 #include <string>
 
+#include <cuda_runtime.h>
+
 #include "ImageUtils.h"
 
 extern "C"{
@@ -33,6 +35,8 @@ public:
     void initFrame();
     // Write image into a file
     void writeImage();
+    // Free image resources
+    void freeResources();
 };
 
 #endif
