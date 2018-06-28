@@ -1,0 +1,374 @@
+[MAIN] Program just started!
+[CUDA] GPU initialization took 1 ms!
+
+[FFMPEG] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: UYVY422
+		Operation: NN
+	Execution Time ==> 37.659 ms
+
+[CUDA] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: UYVY422
+		Operation: NN
+	Execution Time ==> 27.1492 ms
+		1st Conversion Time ==> 27.1492 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: YUV422P
+		Operation: NN
+	Execution Time ==> 50.722 ms
+
+[CUDA] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: YUV422P
+		Operation: NN
+	Execution Time ==> -9.22337e+12 ms
+		1st Conversion Time ==> 26.4158 ms
+		Data and Resample Time ==> -9.22337e+12 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: YUV420P
+		Operation: NN
+	Execution Time ==> 43.653 ms
+
+[CUDA] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: YUV420P
+		Operation: NN
+	Execution Time ==> -9.22337e+12 ms
+		1st Conversion Time ==> 20.2766 ms
+		Data and Resample Time ==> -9.22337e+12 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: NV12
+		Operation: NN
+	Execution Time ==> 98.459 ms
+
+[CUDA] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: NV12
+		Operation: NN
+	Execution Time ==> 20.5647 ms
+		1st Conversion Time ==> 20.5647 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/uyvy422-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: UYVY422	To: V210
+		Operation: NN
+	Execution Time ==> 38.1534 ms
+		1st Conversion Time ==> 38.1534 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 38.364 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 27.5512 ms
+		1st Conversion Time ==> 27.5512 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 34.745 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 26.9054 ms
+		1st Conversion Time ==> 26.9054 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 57.38 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 19.6726 ms
+		1st Conversion Time ==> 19.6726 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: NV12
+		Operation: NN
+	Execution Time ==> 87.206 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: NV12
+		Operation: NN
+	Execution Time ==> 19.3679 ms
+		1st Conversion Time ==> 19.3679 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv422p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV422P	To: V210
+		Operation: NN
+	Execution Time ==> 37.7265 ms
+		1st Conversion Time ==> 37.7265 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 37.696 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 27.5617 ms
+		1st Conversion Time ==> 27.5617 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 63.584 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 26.9574 ms
+		1st Conversion Time ==> 26.9574 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 25.849 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 20.2298 ms
+		1st Conversion Time ==> 20.2298 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: NV12
+		Operation: NN
+	Execution Time ==> 28.392 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: NV12
+		Operation: NN
+	Execution Time ==> 20.1088 ms
+		1st Conversion Time ==> 20.1088 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/yuv420p-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: YUV420P	To: V210
+		Operation: NN
+	Execution Time ==> 37.3425 ms
+		1st Conversion Time ==> 37.3425 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: UYVY422
+		Operation: NN
+	Execution Time ==> 119.593 ms
+
+[CUDA] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: UYVY422
+		Operation: NN
+	Execution Time ==> 26.7128 ms
+		1st Conversion Time ==> 26.7128 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: YUV422P
+		Operation: NN
+	Execution Time ==> 66.972 ms
+
+[CUDA] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: YUV422P
+		Operation: NN
+	Execution Time ==> 26.3557 ms
+		1st Conversion Time ==> 26.3557 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: YUV420P
+		Operation: NN
+	Execution Time ==> 29.275 ms
+
+[CUDA] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: YUV420P
+		Operation: NN
+	Execution Time ==> 20.1797 ms
+		1st Conversion Time ==> 20.1797 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: NV12
+		Operation: NN
+	Execution Time ==> 17.06 ms
+
+[CUDA] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: NV12
+		Operation: NN
+	Execution Time ==> 19.9846 ms
+		1st Conversion Time ==> 19.9846 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/nv12-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: NV12	To: V210
+		Operation: NN
+	Execution Time ==> 37.1602 ms
+		1st Conversion Time ==> 37.1602 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/v210-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: V210	To: UYVY422
+		Operation: NN
+	Execution Time ==> 29.5554 ms
+		1st Conversion Time ==> 29.5554 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/v210-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: V210	To: YUV422P
+		Operation: NN
+	Execution Time ==> 27.7028 ms
+		1st Conversion Time ==> 27.7028 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/v210-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: V210	To: YUV420P
+		Operation: NN
+	Execution Time ==> 20.2209 ms
+		1st Conversion Time ==> 20.2209 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/v210-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: V210	To: NV12
+		Operation: NN
+	Execution Time ==> 19.7556 ms
+		1st Conversion Time ==> 19.7556 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/v210-7680x4320.yuv
+		Dimensions: 7680x4320	To: 7680x4320
+		Formats: V210	To: V210
+		Operation: NN
+	Execution Time ==> 47.414 ms
+		1st Conversion Time ==> 47.414 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+

@@ -1,0 +1,374 @@
+[MAIN] Program just started!
+[CUDA] GPU initialization took 1 ms!
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: UYVY422
+		Operation: NN
+	Execution Time ==> 1.89 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: UYVY422
+		Operation: NN
+	Execution Time ==> -1.84467e+13 ms
+		1st Conversion Time ==> 1.59648 ms
+		Data and Resample Time ==> -9.22337e+12 ms
+		2nd Conversion Time ==> -9.22337e+12 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: YUV422P
+		Operation: NN
+	Execution Time ==> 3.038 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: YUV422P
+		Operation: NN
+	Execution Time ==> -1.84467e+13 ms
+		1st Conversion Time ==> 1.34835 ms
+		Data and Resample Time ==> -9.22337e+12 ms
+		2nd Conversion Time ==> -9.22337e+12 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: YUV420P
+		Operation: NN
+	Execution Time ==> 2.683 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: YUV420P
+		Operation: NN
+	Execution Time ==> -1.84467e+13 ms
+		1st Conversion Time ==> 1.40003 ms
+		Data and Resample Time ==> -9.22337e+12 ms
+		2nd Conversion Time ==> -9.22337e+12 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: NV12
+		Operation: NN
+	Execution Time ==> 5.827 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: NV12
+		Operation: NN
+	Execution Time ==> 1.4195 ms
+		1st Conversion Time ==> 1.4195 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-uyvy422-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: UYVY422	To: V210
+		Operation: NN
+	Execution Time ==> 2.44981 ms
+		1st Conversion Time ==> 2.44981 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 2.41 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 1.90046 ms
+		1st Conversion Time ==> 1.90046 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 2.052 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 2.07773 ms
+		1st Conversion Time ==> 2.07773 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 3.595 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 1.44643 ms
+		1st Conversion Time ==> 1.44643 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: NV12
+		Operation: NN
+	Execution Time ==> 5.46 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: NV12
+		Operation: NN
+	Execution Time ==> 1.60375 ms
+		1st Conversion Time ==> 1.60375 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv422p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV422P	To: V210
+		Operation: NN
+	Execution Time ==> 2.60201 ms
+		1st Conversion Time ==> 2.60201 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 2.474 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: UYVY422
+		Operation: NN
+	Execution Time ==> 2.09783 ms
+		1st Conversion Time ==> 2.09783 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 4.064 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: YUV422P
+		Operation: NN
+	Execution Time ==> 2.18194 ms
+		1st Conversion Time ==> 2.18194 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 1.533 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: YUV420P
+		Operation: NN
+	Execution Time ==> 1.59822 ms
+		1st Conversion Time ==> 1.59822 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: NV12
+		Operation: NN
+	Execution Time ==> 1.786 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: NV12
+		Operation: NN
+	Execution Time ==> 1.64151 ms
+		1st Conversion Time ==> 1.64151 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-yuv420p-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: YUV420P	To: V210
+		Operation: NN
+	Execution Time ==> 3.00793 ms
+		1st Conversion Time ==> 3.00793 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: UYVY422
+		Operation: NN
+	Execution Time ==> 7.661 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: UYVY422
+		Operation: NN
+	Execution Time ==> 2.2833 ms
+		1st Conversion Time ==> 2.2833 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: YUV422P
+		Operation: NN
+	Execution Time ==> 4.248 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: YUV422P
+		Operation: NN
+	Execution Time ==> 2.26708 ms
+		1st Conversion Time ==> 2.26708 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: YUV420P
+		Operation: NN
+	Execution Time ==> 1.876 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: YUV420P
+		Operation: NN
+	Execution Time ==> 1.73011 ms
+		1st Conversion Time ==> 1.73011 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[FFMPEG] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: NV12
+		Operation: NN
+	Execution Time ==> 1.073 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: NV12
+		Operation: NN
+	Execution Time ==> 1.78397 ms
+		1st Conversion Time ==> 1.78397 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-nv12-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: NV12	To: V210
+		Operation: NN
+	Execution Time ==> 3.07856 ms
+		1st Conversion Time ==> 3.07856 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-v210-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: V210	To: UYVY422
+		Operation: NN
+	Execution Time ==> 2.33732 ms
+		1st Conversion Time ==> 2.33732 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-v210-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: V210	To: YUV422P
+		Operation: NN
+	Execution Time ==> 2.37932 ms
+		1st Conversion Time ==> 2.37932 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-v210-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: V210	To: YUV420P
+		Operation: NN
+	Execution Time ==> 1.76439 ms
+		1st Conversion Time ==> 1.76439 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-v210-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: V210	To: NV12
+		Operation: NN
+	Execution Time ==> 1.8213 ms
+		1st Conversion Time ==> 1.8213 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
+[CUDA] Processed image x1000 time(s): imgs/bbb-v210-1920x1080.yuv
+		Dimensions: 1920x1080	To: 1920x1080
+		Formats: V210	To: V210
+		Operation: NN
+	Execution Time ==> 3.1558 ms
+		1st Conversion Time ==> 3.1558 ms
+		Data and Resample Time ==> 0 ms
+		2nd Conversion Time ==> 0 ms
+	Init time: 0 ms
+	Finish time: 0 ms
+
