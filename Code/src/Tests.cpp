@@ -83,16 +83,16 @@ int testFFMPEGAverage(ImageClass &inImg, ImageClass outImg, int operation, int n
     int avgExecutionTime = acc / nTimes;
 
     // Display results
-    cout << "[FFMPEG] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
-    cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
-    cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
-    cout << "\t\tOperation: " << operationToString(operation) << endl;
-    cout << "\tExecution Time ==> " << avgExecutionTime / 1000. << " ms" << endl << endl;
+    //cout << "[FFMPEG] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
+    //cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
+    //cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
+    //cout << "\t\tOperation: " << operationToString(operation) << endl;
+    //cout << "\tExecution Time ==> " << avgExecutionTime / 1000. << " ms" << endl << endl;
 
-    //cout << operationToString(operation) << ",";
-    //cout << pixelFormatToString(inImg.pixelFormat) << "," << pixelFormatToString(outImg.pixelFormat) << ",";
-    //cout << outImg.width << "x" << outImg.height << ",";
-    //cout << avgExecutionTime / 1000. << ",";
+    cout << operationToString(operation) << ",";
+    cout << pixelFormatToString(inImg.pixelFormat) << "," << pixelFormatToString(outImg.pixelFormat) << ",";
+    cout << outImg.width << "x" << outImg.height << ",";
+    cout << avgExecutionTime / 1000. << ",";
 
     // Write image to file
     outImg.fileName += "[FFMPEG]" + operationToString(operation) + "-" + pixelFormatToString(inImg.pixelFormat) + "-" + pixelFormatToString(outImg.pixelFormat);
@@ -147,7 +147,7 @@ int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTi
     // Temporary variable
     high_resolution_clock::time_point initTime, stopTime;
     long long initAcc = 0, finishAcc = 0;
-    double firstConvertion = 0., transferAndResample = 0., secondConversion = 0.;
+    long long firstConvertion = 0, transferAndResample = 0, secondConversion = 0;
 
     inImg.loadImage();
     outImg.initFrame();
@@ -192,23 +192,23 @@ int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTi
     outImg.freeResources();
 
     // Display results
-    cout << "[CUDA] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
-    cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
-    cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
-    cout << "\t\tOperation: " << operationToString(operation) << endl;
-    cout << "\tExecution Time ==> " << (firstConvertion / nTimes + transferAndResample / nTimes + secondConversion / nTimes) / 1000. << " ms" << endl;
-    cout << "\t\t1st Conversion Time ==> " << (firstConvertion / nTimes) / 1000. << " ms" << endl;
-    cout << "\t\tData and Resample Time ==> " << (transferAndResample / nTimes) / 1000. << " ms" << endl;
-    cout << "\t\t2nd Conversion Time ==> " << (secondConversion / nTimes) / 1000. << " ms" << endl;
-    cout << "\tInit time: " << (initAcc / nTimes) / 1000. << " ms" << endl;
-    cout << "\tFinish time: " << (finishAcc / nTimes) / 1000. << " ms" << endl << endl;
+    //cout << "[CUDA] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
+    //cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
+    //cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
+    //cout << "\t\tOperation: " << operationToString(operation) << endl;
+    //cout << "\tExecution Time ==> " << (1. * firstConvertion / nTimes + transferAndResample / nTimes + secondConversion / nTimes) / 1000. << " ms" << endl;
+    //cout << "\t\t1st Conversion Time ==> " << (1. * firstConvertion / nTimes) / 1000. << " ms" << endl;
+    //cout << "\t\tData and Resample Time ==> " << (transferAndResample / nTimes) / 1000. << " ms" << endl;
+    //cout << "\t\t2nd Conversion Time ==> " << (secondConversion / nTimes) / 1000. << " ms" << endl;
+    //cout << "\tInit time: " << (initAcc / nTimes) / 1000. << " ms" << endl;
+    //cout << "\tFinish time: " << (finishAcc / nTimes) / 1000. << " ms" << endl << endl;
 
-    //cout << (firstConvertion / nTimes + transferAndResample / nTimes + secondConversion / nTimes) / 1000. << ",";
-    //cout << (initAcc / nTimes) / 1000. << ",";
-    //cout << (finishAcc / nTimes) / 1000. << ",";
-    //cout << (firstConvertion / nTimes) / 1000. << ",";
-    //cout << (secondConversion / nTimes) / 1000. << ",";
-    //cout << (transferAndResample / nTimes) / 1000. << "," << " ," << " ," << " ," << endl;
+    cout << (firstConvertion / nTimes + transferAndResample / nTimes + secondConversion / nTimes) / 1000. << ",";
+    cout << (initAcc / nTimes) / 1000. << ",";
+    cout << (finishAcc / nTimes) / 1000. << ",";
+    cout << (firstConvertion / nTimes) / 1000. << ",";
+    cout << (secondConversion / nTimes) / 1000. << ",";
+    cout << (transferAndResample / nTimes) / 1000. << "," << " ," << " ," << " ," << endl;
 
     // Success
     return 1;
@@ -230,9 +230,6 @@ void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<
 
 // Test all procedures
 void testAll(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
-    //testFFMPEG(inImgs, outImgs, operations, nTimes);
-    //testCUDA(inImgs, outImgs, operations, nTimes);
-
     // For each input image
     for(int indexIn = 0; indexIn < inImgs.size(); indexIn++){
         // For each operation
@@ -248,6 +245,4 @@ void testAll(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<i
             }
         }
     }
-
-
 }
