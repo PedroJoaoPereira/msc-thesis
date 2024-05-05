@@ -6,6 +6,7 @@
 
 #include "FFMPEG_Scale.h"
 #include "Sequential_Scale.h"
+#include "OMP_Scale.h"
 
 using namespace std;
 
@@ -22,6 +23,11 @@ void testFFMPEG(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<
 int testSequentialSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
 int testSequentialAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
 void testSequential(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
+
+// Test openmp procedure
+int testOMPSingle(ImageInfo &inImg, ImageInfo &outImg, int operation);
+int testOMPAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTimes);
+void testOMP(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);
 
 // Test all procedures
 void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<int> &operations, int nTimes);

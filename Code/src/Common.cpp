@@ -77,8 +77,6 @@ int getTempScaleFormat(int inFormat){
             return AV_PIX_FMT_YUV422P;
         case AV_PIX_FMT_YUV420P:
             return AV_PIX_FMT_YUV420P;
-        case AV_PIX_FMT_RGB24:
-            return AV_PIX_FMT_YUV444P;
         case AV_PIX_FMT_UYVY422:
             return AV_PIX_FMT_YUV422P;
         case AV_PIX_FMT_NV12:
