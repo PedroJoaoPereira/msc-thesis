@@ -107,9 +107,9 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 			clamp(g, 0.f, 255.f);
 			clamp(b, 0.f, 255.f);
 
-			dstSlice[0][indexMul3] = float2uint8_t(r);		// R
-			dstSlice[0][indexMul3 + 1] = float2uint8_t(g);	// G
-			dstSlice[0][indexMul3 + 2] = float2uint8_t(b);	// B
+			dstSlice[0][indexMul3] = roundTo<uint8_t, float>(r);		// R
+			dstSlice[0][indexMul3 + 1] = roundTo<uint8_t, float>(g);	// G
+			dstSlice[0][indexMul3 + 2] = roundTo<uint8_t, float>(b);	// B
 		}
 
 		// Success
@@ -135,8 +135,8 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 			float u2 = static_cast<float>(srcSlice[1][indexAdd1]);	// U2
 			float v2 = static_cast<float>(srcSlice[2][indexAdd1]);	// V2
 
-			dstSlice[1][indexDiv2] = float2uint8_t((u1 + u2) / 2.f);
-			dstSlice[2][indexDiv2] = float2uint8_t((v1 + v2) / 2.f);
+			dstSlice[1][indexDiv2] = roundTo<uint8_t, float>((u1 + u2) / 2.f);
+			dstSlice[2][indexDiv2] = roundTo<uint8_t, float>((v1 + v2) / 2.f);
 		}
 
 		// Success
@@ -175,8 +175,8 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 				float v4 = static_cast<float>(srcSlice[2][index4]);	// V4
 
 				int indexFinal = (lin / 2) * (srcWidth / 2) + (col / 2);
-				dstSlice[1][indexFinal] = float2uint8_t((u1 + u2 + u3 + u4) / 4.f);
-				dstSlice[2][indexFinal] = float2uint8_t((v1 + v2 + v3 + v4) / 4.f);
+				dstSlice[1][indexFinal] = roundTo<uint8_t, float>((u1 + u2 + u3 + u4) / 4.f);
+				dstSlice[2][indexFinal] = roundTo<uint8_t, float>((v1 + v2 + v3 + v4) / 4.f);
 			}
 		}
 
@@ -200,9 +200,9 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 			float u2 = static_cast<float>(srcSlice[1][indexAdd1]);	// U2
 			float v2 = static_cast<float>(srcSlice[2][indexAdd1]);	// V2
 
-			dstSlice[0][indexMul2] = float2uint8_t((u1 + u2) / 2.f);
+			dstSlice[0][indexMul2] = roundTo<uint8_t, float>((u1 + u2) / 2.f);
 			dstSlice[0][indexMul2 + 1] = srcSlice[0][index];
-			dstSlice[0][indexMul2 + 2] = float2uint8_t((v1 + v2) / 2.f);
+			dstSlice[0][indexMul2 + 2] = roundTo<uint8_t, float>((v1 + v2) / 2.f);
 			dstSlice[0][indexMul2 + 3] = srcSlice[0][indexAdd1];
 		}
 
@@ -245,8 +245,8 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 				float v4 = static_cast<float>(srcSlice[2][index4]);	// V4
 
 				int indexFinal = lin * widthDiv2 + col;
-				dstSlice[1][indexFinal] = float2uint8_t((u1 + u2 + u3 + u4) / 4.f);
-				dstSlice[1][indexFinal + 1] = float2uint8_t((v1 + v2 + v3 + v4) / 4.f);
+				dstSlice[1][indexFinal] = roundTo<uint8_t, float>((u1 + u2 + u3 + u4) / 4.f);
+				dstSlice[1][indexFinal + 1] = roundTo<uint8_t, float>((v1 + v2 + v3 + v4) / 4.f);
 			}
 		}
 
@@ -277,8 +277,8 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 				float v2 = static_cast<float>(srcSlice[2][index2]);	// V2
 
 				int indexFinal = (lin / 2) * widthDiv2 + col;
-				dstSlice[1][indexFinal] = float2uint8_t((u1 + u2) / 2.f);
-				dstSlice[2][indexFinal] = float2uint8_t((v1 + v2) / 2.f);
+				dstSlice[1][indexFinal] = roundTo<uint8_t, float>((u1 + u2) / 2.f);
+				dstSlice[2][indexFinal] = roundTo<uint8_t, float>((v1 + v2) / 2.f);
 			}
 		}
 
@@ -330,8 +330,8 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 				float v2 = static_cast<float>(srcSlice[2][index2]);	// V2
 
 				int indexFinal = lin * widthDiv2 + col * 2;
-				dstSlice[1][indexFinal] = float2uint8_t((u1 + u2) / 2.f);
-				dstSlice[1][indexFinal + 1] = float2uint8_t((v1 + v2) / 2.f);
+				dstSlice[1][indexFinal] = roundTo<uint8_t, float>((u1 + u2) / 2.f);
+				dstSlice[1][indexFinal + 1] = roundTo<uint8_t, float>((v1 + v2) / 2.f);
 			}
 		}
 
@@ -391,8 +391,8 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 				dstSlice[0][indexFinalBottom + 1] = yb2;
 
                 int indexFinalTopChroma = linIndexTop / 8 + col / 4;
-                dstSlice[1][indexFinalTopChroma] = float2uint8_t((u1 + u2) / 2.f);
-                dstSlice[2][indexFinalTopChroma] = float2uint8_t((v1 + v2) / 2.f);
+                dstSlice[1][indexFinalTopChroma] = roundTo<uint8_t, float>((u1 + u2) / 2.f);
+                dstSlice[2][indexFinalTopChroma] = roundTo<uint8_t, float>((v1 + v2) / 2.f);
 			}
 		}
 
@@ -431,8 +431,8 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
                 dstSlice[0][indexFinalBottom + 1] = yb2;
 
                 int indexFinalTopChroma = linIndexTop / 4 + colDiv2;
-                dstSlice[1][indexFinalTopChroma] = float2uint8_t((u1 + u2) / 2.f);
-                dstSlice[1][indexFinalTopChroma + 1] = float2uint8_t((v1 + v2) / 2.f);
+                dstSlice[1][indexFinalTopChroma] = roundTo<uint8_t, float>((u1 + u2) / 2.f);
+                dstSlice[1][indexFinalTopChroma + 1] = roundTo<uint8_t, float>((v1 + v2) / 2.f);
             }
         }
 
@@ -503,9 +503,9 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 			float u = -0.148f*r - 0.291f*g + 0.439f*b + 128.f;	// U
 			float v = 0.439f*r - 0.368f*g - 0.071f*b + 128.f;	// V
 
-			dstSlice[0][indexDiv3] = float2uint8_t(y);	// Y
-			dstSlice[1][indexDiv3] = float2uint8_t(u);	// U
-			dstSlice[2][indexDiv3] = float2uint8_t(v);	// V
+			dstSlice[0][indexDiv3] = roundTo<uint8_t, float>(y);	// Y
+			dstSlice[1][indexDiv3] = roundTo<uint8_t, float>(u);	// U
+			dstSlice[2][indexDiv3] = roundTo<uint8_t, float>(v);	// V
 		}
 
 		// Success
@@ -531,14 +531,14 @@ int sequential_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
             float linOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio - 0.5f;
             // Original line index coordinate
             float linOriginalIndex = floor(linOriginal);
-            int linOriginalIndexRounded = float2int(linOriginalIndex);
+            int linOriginalIndexRounded = roundTo<uint8_t, float>(linOriginalIndex);
 
             // Calculate original line coordinates of the pixels to interpolate
             int linThresholdMax = srcHeight - 1;
             int linMin = linOriginalIndexRounded;
-            clampPixel(linMin, 0, linThresholdMax);
+            clamp<int>(linMin, 0, linThresholdMax);
             int linMax = linOriginalIndexRounded + 1;
-            clampPixel(linMax, 0, linThresholdMax);
+            clamp<int>(linMax, 0, linThresholdMax);
 
             // Calculate distance of the scaled coordinate to the original
             float verticalDistance = linOriginal - static_cast<float>(linMin);
@@ -553,14 +553,14 @@ int sequential_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
                 float colOriginal = (static_cast<float>(col) + 0.5f) / scaleWidthRatio - 0.5f;
                 // Original column index coordinate
                 float colOriginalIndex = floor(colOriginal);
-                int colOriginalIndexRounded = float2int(colOriginalIndex);
+                int colOriginalIndexRounded = roundTo<uint8_t, float>(colOriginalIndex);
 
                 // Calculate original column coordinates of the pixels to interpolate
                 int colThresholdMax = srcWidth - 1;
                 int colMin = colOriginalIndexRounded;
-                clampPixel(colMin, 0, colThresholdMax);
+                clamp<int>(colMin, 0, colThresholdMax);
                 int colMax = colOriginalIndexRounded + 1;
-                clampPixel(colMax, 0, colThresholdMax);
+                clamp<int>(colMax, 0, colThresholdMax);
 
                 // Calculate distance of the scaled coordinate to the original
                 float horizontalDistance = colOriginal - static_cast<float>(colMin);
@@ -577,7 +577,7 @@ int sequential_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
                 getPixel(srcSlice, srcWidth, srcHeight, linMax, colMin, &colorBottomLeft);
                 getPixel(srcSlice, srcWidth, srcHeight, linMax, colMax, &colorBottomRight);
                 // Interpolate and store value
-                dstSlice[lin * dstWidth + col] = float2uint8_t(
+                dstSlice[lin * dstWidth + col] = roundTo<uint8_t, float>(
                     (static_cast<float>(colorTopLeft) * colMinDistance + static_cast<float>(colorTopRight) * colMaxDistance) * linMinDistance +
                     (static_cast<float>(colorBottomLeft) * colMinDistance + static_cast<float>(colorBottomRight) * colMaxDistance) * linMaxDistance);
             }
@@ -594,7 +594,7 @@ int sequential_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
             float linOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio;
             // Original line index coordinate
             float linOriginalIndex = floor(linOriginal);
-            int linOriginalIndexRounded = float2int(linOriginalIndex);
+            int linOriginalIndexRounded = roundTo<uint8_t, float>(linOriginalIndex);
 
             // Calculate original line coordinates of the pixels to interpolate
             int linMin = linOriginalIndexRounded - 1;
@@ -606,7 +606,7 @@ int sequential_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
                 float colOriginal = (static_cast<float>(col) + 0.5f) / scaleWidthRatio;
                 // Original column index coordinate
                 float colOriginalIndex = floor(colOriginal);
-                int colOriginalIndexRounded = float2int(colOriginalIndex);
+                int colOriginalIndexRounded = roundTo<uint8_t, float>(colOriginalIndex);
 
                 // Calculate original column coordinates of the pixels to interpolate
                 int colMin = colOriginalIndexRounded - 1;
@@ -636,7 +636,7 @@ int sequential_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
                 // Clamp value to avoid color undershooting and overshooting
                 clamp(result, 0.0f, 255.0f);
                 // Store the result value
-                dstSlice[lin * dstWidth + col] = float2uint8_t(result);
+                dstSlice[lin * dstWidth + col] = roundTo<uint8_t, float>(result);
             }
         }
 

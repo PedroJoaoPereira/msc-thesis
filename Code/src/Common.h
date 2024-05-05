@@ -36,25 +36,21 @@ int createImageDataBuffer(int width, int height, AVPixelFormat pixelFormat, uint
 // Initialize and transfer data to AVFrame
 int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat pixelFormat, AVFrame** frame);
 
-// int& index   - pixel index to be clamped
-// int min      - minimum limit of the pixel index
-// int max      - maximum limit of the pixel index
-// Limit a pixel index value to a defined interval
-void clampPixel(int &index, int min, int max);
+// AVPixelFormat format	- pixel format of the data
+// Return if format is supported
+bool isSupportedFormat(AVPixelFormat format);
 
-// float val    - value to be clamped
-// float min    - minimum limit of clamping
-// float max    - maximum limit of clamping
-// Limit a value to a defined interval
-void clamp(float &val, float min, float max);
+// AVPixelFormat inFormat	- pixel format of the source data
+// Return the temporary scale pixel format
+AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat);
 
-// float value  - value to be converted
-// Convert a float to an uint8_t
-uint8_t float2uint8_t(float value);
 
-// float value  - value to be converted
-// Convert a float to an int
-int float2int(float value);
+
+
+
+
+
+
 
 // uint8_t* data        - image data to retrieve color from
 // int width            - width of the image
@@ -69,8 +65,55 @@ void getPixel(uint8_t* data, int width, int height, int lin, int col, uint8_t* p
 // Get the bicubic coefficients
 float getBicubicCoef(float x);
 
-// AVPixelFormat inFormat	- pixel format of the source data
-// Return the temporary scale pixel format
-AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat);
+float getBilinearCoef(float x);
+
+
+
+
+
+
+
+
+
+
+// DataType val - value to be clamped
+// DataType min - minimum limit of clamping
+// DataType max - maximum limit of clamping
+// Limit a value to a defined interval
+template <class DataType>
+void clamp(DataType &val, DataType min, DataType max);
+
+// PrecisionType value  - value to be converted
+// Convert a floating point value to fixed point
+template <class DataType, class PrecisionType>
+DataType roundTo(PrecisionType value);
+
+// int lin              - line coordinate of pixel to retrieve
+// int col              - column coordinate of pixel to retrieve
+// int width            - width of the image
+// int height           - height of the image
+// DataType* data       - image data to retrieve color from
+// DataType* pixelVal   - value that will be filled with the retrieved color
+// Get a valid pixel from the image
+template <class DataType>
+void getPixel(int lin, int col, int width, int height, DataType* data, DataType* pixelVal);
+
+// PrecisionType val    - distance value to calculate coefficient from
+// Calculate nearest neighbor interpolation coefficient from a distance
+template <class PrecisionType>
+PrecisionType NearestNeighborCoefficient(PrecisionType val);
+
+// PrecisionType val    - distance value to calculate coefficient from
+// Calculate bilinear interpolation coefficient from a distance
+template <class PrecisionType>
+PrecisionType BilinearCoefficient(PrecisionType val);
+
+// PrecisionType val    - distance value to calculate coefficient from
+// Calculate Mitchell interpolation coefficient from a distance
+template <class PrecisionType>
+PrecisionType MitchellCoefficient(PrecisionType val);
+
+// Include template methods implementations
+#include "Common.hpp"
 
 #endif
