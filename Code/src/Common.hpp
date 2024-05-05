@@ -41,9 +41,9 @@ void clamp(PrecisionType &val, PrecisionType min, PrecisionType max){
 }
 
 // Convert a floating point value to fixed point
-template <class PrecisionType>
-uint8_t roundTo(PrecisionType value){
-    return static_cast<uint8_t>(value + static_cast<PrecisionType>(0.5) - (value < static_cast<PrecisionType>(0.)));
+template <class DataType, class PrecisionType>
+DataType roundTo(PrecisionType value){
+    return static_cast<DataType>(value + static_cast<PrecisionType>(0.5) - (value < static_cast<PrecisionType>(0.)));
 }
 
 // Calculate nearest neighbor interpolation coefficient from a distance
