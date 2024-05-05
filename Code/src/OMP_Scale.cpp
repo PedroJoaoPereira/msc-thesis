@@ -67,13 +67,17 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int lin = 0; lin < heightDiv2; lin++) {
+            // Calculate once
+            int linMul2 = lin * 2;
+            int linStrideDiv4 = lin * strideDiv4;
+
             // Buffer pointers
-            auto srcBuffer = srcSlice[0] + lin * stride;
-            auto srcBufferBelow = srcSlice[0] + (lin + 1) * stride;
-            auto dstBuffer = dstSlice[0] + lin * dstStride[0];
-            auto dstBufferBelow = dstSlice[0] + (lin + 1) * dstStride[0];
-            auto dstBufferChromaU = dstSlice[1] + lin * strideDiv4;
-            auto dstBufferChromaV = dstSlice[2] + lin * strideDiv4;
+            auto srcBuffer = srcSlice[0] + linMul2 * stride;
+            auto srcBufferBelow = srcBuffer + stride;
+            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
+            auto dstBufferBelow = dstBuffer + srcWidth;
+            auto dstBufferChromaU = dstSlice[1] + linStrideDiv4;
+            auto dstBufferChromaV = dstSlice[2] + linStrideDiv4;
 
             for (int col = 0; col < strideDiv4; col++) {
                 PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
@@ -107,18 +111,22 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
 
         // Calculate once
         int heightDiv2 = srcHeight / 2;
+        int strideDiv2 = stride / 2;
         int strideDiv4 = stride / 4;
-
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferBelow = srcBuffer + stride;
-        auto dstBuffer = dstSlice[0];
-        auto dstBufferBelow = dstBuffer + srcWidth;
-        auto dstBufferChroma = dstSlice[1];
 
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int lin = 0; lin < heightDiv2; lin++) {
+            // Calculate once
+            int linMul2 = lin * 2;
+
+            // Buffer pointers
+            auto srcBuffer = srcSlice[0] + linMul2 * stride;
+            auto srcBufferBelow = srcBuffer + stride;
+            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
+            auto dstBufferBelow = dstBuffer + srcWidth;
+            auto dstBufferChroma = dstSlice[1] + lin * strideDiv2;
+
             for (int col = 0; col < strideDiv4; col++) {
                 PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
                 PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
@@ -139,12 +147,6 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
                 *dstBufferChroma++ = u0;
                 *dstBufferChroma++ = v0;
             }
-
-            srcBuffer += stride;
-            srcBufferBelow += stride;
-
-            dstBuffer += srcWidth;
-            dstBufferBelow += srcWidth;
         }
 
         // Success
@@ -155,16 +157,16 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Number of elements
         long numElements = srcStride[0] * srcHeight / 12;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]);
-
         // Assign once
         enum { SHIFT_8TO10B = 2U, SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, };
 
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int index = 0; index < numElements; index++) {
+            // Buffer pointers
+            auto srcBuffer = srcSlice[0] + index * 12;
+            auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]) + index * 4;
+
             auto u0 = *srcBuffer++ << SHIFT_8TO10B; // U0
             auto y0 = *srcBuffer++ << SHIFT_8TO10B; // Y0
             auto v0 = *srcBuffer++ << SHIFT_8TO10B; // V0
@@ -194,15 +196,15 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Number of elements
         long numElements = srcStride[0] * srcHeight / 2;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto dstBuffer = dstSlice[0];
-
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int index = 0; index < numElements; index++) {
+            // Buffer pointers
+            auto srcBuffer = srcSlice[0] + index * 2;
+            auto srcBufferChromaU = srcSlice[1] + index;
+            auto srcBufferChromaV = srcSlice[2] + index;
+            auto dstBuffer = dstSlice[0] + index * 4;
+
             *dstBuffer++ = *srcBufferChromaU++; // U0
             *dstBuffer++ = *srcBuffer++; // Y0
             *dstBuffer++ = *srcBufferChromaV++; // V0
@@ -217,24 +219,31 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Access once
         int stride = srcStride[0];
 
-        // Luma plane is the same
-        memcpy(dstSlice[0], srcSlice[0], stride * srcHeight);
-
         // Calculate once
         int heightDiv2 = srcHeight / 2;
+        int strideMul2 = stride * 2;
         int strideDiv2 = stride / 2;
-
-        // Buffer pointers
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
-        auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
-        auto dstBufferChromaU = dstSlice[1];
-        auto dstBufferChromaV = dstSlice[2];
 
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int lin = 0; lin < heightDiv2; lin++) {
+            // Calculate once
+            int linMulStride = lin * stride;
+            int linMul2MulStride = lin * 2 * stride;
+            int linMulStrideDiv2 = lin * strideDiv2;
+
+            // Buffer pointers
+            auto srcBuffer = srcSlice[0] + linMul2MulStride;
+            auto srcBufferChromaU = srcSlice[1] + linMulStride;
+            auto srcBufferChromaV = srcSlice[2] + linMulStride;
+            auto srcBufferBelow = srcBuffer + stride;
+            auto srcBufferChromaUBelow = srcBufferChromaU + stride;
+            auto srcBufferChromaVBelow = srcBufferChromaV + stride;
+            auto dstBuffer = dstSlice[0] + linMul2MulStride;
+            auto dstBufferBelow = dstBuffer + stride;
+            auto dstBufferChromaU = dstSlice[1] + linMulStrideDiv2;
+            auto dstBufferChromaV = dstSlice[2] + linMulStrideDiv2;
+
             for (int col = 0; col < strideDiv2; col++) {
                 PrecisionType u0 = static_cast<PrecisionType>(*srcBufferChromaU++); // U0
                 PrecisionType v0 = static_cast<PrecisionType>(*srcBufferChromaV++); // V0
@@ -242,14 +251,14 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
                 PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
                 PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
 
+                *dstBuffer++ = *srcBuffer++;
+                *dstBuffer++ = *srcBuffer++;
+                *dstBufferBelow++ = *srcBufferBelow++;
+                *dstBufferBelow++ = *srcBufferBelow++;
+
                 *dstBufferChromaU++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
                 *dstBufferChromaV++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
             }
-
-            srcBufferChromaU += strideDiv2;
-            srcBufferChromaV += strideDiv2;
-            srcBufferChromaUBelow += strideDiv2;
-            srcBufferChromaVBelow += strideDiv2;
         }
 
         // Success
@@ -260,23 +269,29 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Access once
         int stride = srcStride[0];
 
-        // Luma plane is the same
-        memcpy(dstSlice[0], srcSlice[0], stride * srcHeight);
-
         // Calculate once
         int heightDiv2 = srcHeight / 2;
         int strideDiv2 = stride / 2;
 
-        // Buffer pointers
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
-        auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
-        auto dstBufferChroma = dstSlice[1];
-
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int lin = 0; lin < heightDiv2; lin++) {
+            // Calculate once
+            int linMulStride = lin * stride;
+            int linMul2MulStride = lin * 2 * stride;
+            int linMulStrideDiv2 = lin * strideDiv2;
+
+            // Buffer pointers
+            auto srcBuffer = srcSlice[0] + linMul2MulStride;
+            auto srcBufferChromaU = srcSlice[1] + linMulStride;
+            auto srcBufferChromaV = srcSlice[2] + linMulStride;
+            auto srcBufferBelow = srcBuffer + stride;
+            auto srcBufferChromaUBelow = srcBufferChromaU + stride;
+            auto srcBufferChromaVBelow = srcBufferChromaV + stride;
+            auto dstBuffer = dstSlice[0] + linMul2MulStride;
+            auto dstBufferBelow = dstBuffer + stride;
+            auto dstBufferChroma = dstSlice[1] + lin * strideDiv2 * 2;
+
             for (int col = 0; col < strideDiv2; col++) {
                 PrecisionType u0 = static_cast<PrecisionType>(*srcBufferChromaU++); // U0
                 PrecisionType v0 = static_cast<PrecisionType>(*srcBufferChromaV++); // V0
@@ -284,14 +299,14 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
                 PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
                 PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
 
+                *dstBuffer++ = *srcBuffer++;
+                *dstBuffer++ = *srcBuffer++;
+                *dstBufferBelow++ = *srcBufferBelow++;
+                *dstBufferBelow++ = *srcBufferBelow++;
+
                 *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
                 *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
             }
-
-            srcBufferChromaU += strideDiv2;
-            srcBufferChromaV += strideDiv2;
-            srcBufferChromaUBelow += strideDiv2;
-            srcBufferChromaVBelow += strideDiv2;
         }
 
         // Success

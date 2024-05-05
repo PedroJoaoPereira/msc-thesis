@@ -73,18 +73,19 @@ int main(){
     uyvy422ResampleInImgs.push_back(img_uyvy422_1920x1080);
     vector<ImageInfo*> uyvy422ResampleOutImgs = vector<ImageInfo*>();
     //uyvy422ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
-    uyvy422ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
+    //uyvy422ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
     //uyvy422ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
     //uyvy422ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
-    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, uyvy422ResampleInImgs, uyvy422ResampleOutImgs, resampleOperations, nTimes);
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, uyvy422ResampleInImgs, uyvy422ResampleOutImgs, resampleOperations, nTimes);
 
     // RESAMPLE YUV422P ---------------------------------------------
     vector<ImageInfo*> yuv422pResampleInImgs = vector<ImageInfo*>();
     yuv422pResampleInImgs.push_back(img_yuv422p_1920x1080);
     vector<ImageInfo*> yuv422pResampleOutImgs = vector<ImageInfo*>();
     //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-    //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
+
+    //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));    
     //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
     //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
