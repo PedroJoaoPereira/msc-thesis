@@ -7,7 +7,7 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
                   int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]);
 
 // Sequential scale method
-void seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
+int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
                int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[],
                int operation);
 
@@ -66,14 +66,14 @@ int sequential_scale(ImageInfo src, ImageInfo dst, int operation){
     // Start counting operation execution time
     initTime = high_resolution_clock::now();
 
-    // DEBUG
-    seq_resampler(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
-                  dst.width, dst.height, dst.pixelFormat, dstFrame->data, dstFrame->linesize);
-
     // Apply the scaling operation
-    seq_scale(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
-              dst.width, dst.height, dst.pixelFormat, dstFrame->data, dstFrame->linesize,
-              operation);
+    if(seq_scale(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
+                 dst.width, dst.height, dst.pixelFormat, dstFrame->data, dstFrame->linesize,
+                 operation) < 0) return -1;
+
+    // DEBUG
+    /*seq_resampler(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
+                  dst.width, dst.height, dst.pixelFormat, dstFrame->data, dstFrame->linesize);*/
 
     // Stop counting operation execution time
     stopTime = high_resolution_clock::now();
@@ -117,102 +117,178 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         return 0;
     }
 
-    // Calculate once
-    long numPixels = srcStride[0] * srcHeight;
-
     // -----------------------------------------------
     // REORGANIZE COMPONENTS -------------------------
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Calculate once
+        long numElements = srcStride[0] * srcHeight;
+
         // Loop through each pixel
-        for(int index = 0; index < numPixels; index += 4){
+        for(int index = 0; index < numElements; index += 4){
             dstSlice[0][index / 2] = srcSlice[0][index + 1];        // Ya
             dstSlice[0][index / 2 + 1] = srcSlice[0][index + 3];    // Yb
 
-            dstSlice[1][index / 4] = srcSlice[0][index];            // U            
+            dstSlice[1][index / 4] = srcSlice[0][index];            // U
             dstSlice[2][index / 4] = srcSlice[0][index + 2];        // V
         }
 
+        // Success
         return 0;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Calculate once
+        int stride = srcStride[0];
+        long numElements = stride * srcHeight;
+        int columnsByLine = stride / 2;
+
         // Loop through each pixel
-        for(int index = 0; index < numPixels; index += 4){
+        for(int index = 0; index < numElements; index += 4){
             dstSlice[0][index / 2] = srcSlice[0][index + 1];        // Ya
             dstSlice[0][index / 2 + 1] = srcSlice[0][index + 3];    // Yb
 
-            if(((index / srcStride[0]) % 2) == 0){
-                int tempIndex = srcStride[0] / (index / srcStride[0]) + index / 4;
-                dstSlice[1][tempIndex] = srcSlice[0][index];            // U            
-                dstSlice[2][tempIndex] = srcSlice[0][index + 2];        // V
+            int lineIndex = index / (stride * 2);
+            if(lineIndex % 2 == 0){
+                int columnIndex = (index / 4) % columnsByLine;
+                int chromaIndex = lineIndex / 2 * columnsByLine + columnIndex;
+                dstSlice[1][chromaIndex] = srcSlice[0][index];      // U
+                dstSlice[2][chromaIndex] = srcSlice[0][index + 2];  // V
             }
-
         }
 
+        // Success
         return 0;
     }
 
-    cerr << "Could not do conversion, not supported!" << endl;
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV444P){
+        // Calculate once
+        long numElements = srcStride[0] * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index += 4){
+            dstSlice[0][index / 2] = srcSlice[0][index + 1];        // Ya
+            dstSlice[0][index / 2 + 1] = srcSlice[0][index + 3];    // Yb
+
+            dstSlice[1][index / 2] = srcSlice[0][index];            // U
+            dstSlice[1][index / 2 + 1] = srcSlice[0][index];
+
+            dstSlice[2][index / 2] = srcSlice[0][index + 2];        // V
+            dstSlice[2][index / 2 + 1] = srcSlice[0][index + 2];
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV444P){
+        // Calculate once
+        long numElements = srcStride[0] * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index++){
+            dstSlice[0][index] = srcSlice[0][index];        // Y
+
+            dstSlice[1][index] = srcSlice[1][index / 2];    // U
+            dstSlice[1][index] = srcSlice[1][index / 2];
+
+            dstSlice[2][index] = srcSlice[2][index / 2];    // V
+            dstSlice[2][index] = srcSlice[2][index / 2];
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Calculate once
+        long numElements = srcStride[0] * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index++){
+            dstSlice[0][index] = srcSlice[0][index];            // Y
+
+            if(index % 2 == 0){
+                dstSlice[1][index / 2] = srcSlice[1][index];    // U
+                dstSlice[2][index / 2] = srcSlice[2][index];    // V
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
     return -1;
 }
 
-void seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
+int seq_scale(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
                int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[],
                int operation){
 
-    /*
+    // Variables used
+    int retVal = -1;
+    AVPixelFormat tempFormat = AV_PIX_FMT_YUV444P;
+    uint8_t* tempBuffer;
+    AVFrame* tempFrame;
+
     // Verify input parameters
     if(!srcSlice || !srcStride || !dstSlice || !dstStride){
         cerr << "One of input parameters is null!" << endl;
-        return;
-    }
-    
-    // Prepares frame slices
-    if(isPackedFormat(srcPixelFormat)){
-        srcSlice[0] = srcSlice[1] = srcSlice[2] = srcSlice[3] = srcSlice[0];
-        srcStride[0] = srcStride[1] = srcStride[2] = srcStride[3] = srcStride[0];
+        return -1;
     }
 
-    // Separate image into components
-    uint8_t* aBuffer,* bBuffer,* cBuffer;
-    switch(srcPixelFormat){
-        case AV_PIX_FMT_UYVY422:
-            // Allocate memory for each component
-            aBuffer = (uint8_t*) malloc(sizeof(uint8_t) * srcWidth * srcHeight); // Y
-            bBuffer = (uint8_t*) malloc(sizeof(uint8_t) * srcWidth * srcHeight); // U
-            cBuffer = (uint8_t*) malloc(sizeof(uint8_t) * srcWidth * srcHeight); // V
+    // Verify if image is in right format to scale
+    if(srcPixelFormat != tempFormat){
+        // Prepare to initialize tempFrame
+        retVal = createImageDataBuffer(srcWidth, srcHeight, tempFormat, &tempBuffer);
+        if(retVal < 0)
+            return retVal;
 
-            // Iterate through each pixel and save it corresponding to its component
-            for(size_t index = 0; index < (sizeof(uint8_t) * srcWidth * srcHeight); index += (sizeof(uint8_t) * 4)){
-                bBuffer[index] = bBuffer[index + 1] = srcSlice[0][index];       // U
-                aBuffer[index] = srcSlice[0][index + 1];                        // Ya
-                cBuffer[index] = cBuffer[index + 1] = srcSlice[0][index + 2];   // V
-                aBuffer[index + 1] = srcSlice[0][index + 3];                    // Yb
-            }
-            break;
-        case AV_PIX_FMT_YUV422P:
-            break;
-        case AV_PIX_FMT_YUV420P:
-            break;
-        default:
-            cerr << "Could not separate components!" << endl;
-            return;
+        // Initialize tempFrame
+        retVal = initializeAVFrame(&tempBuffer, srcWidth, srcHeight, tempFormat, &tempFrame);
+        if(retVal < 0){
+            free(tempBuffer);
+            return retVal;
+        }
+
+        if(seq_resampler(srcWidth, srcHeight, srcPixelFormat, srcSlice, srcStride,
+                         srcWidth, srcHeight, tempFormat, tempFrame->data, tempFrame->linesize) < 0){
+
+            // Free used resources
+            av_frame_free(&tempFrame);
+            free(tempBuffer);
+            
+            cerr << "Could not do conversion, not supported!" << endl;
+            return -1;
+        }
+    } else{
+        // Makes the tempFrame the srcFrame
+        // TODO
     }
 
-    // Scale components
+    // Apply the scaling operation
     // TODO
 
-    // Organize components
-    switch(dstPixelFormat){
-        case AV_PIX_FMT_UYVY422:
-            break;
-        case AV_PIX_FMT_YUV422P:
-            break;
-        case AV_PIX_FMT_YUV420P:
-            break;
-        default:
-            cerr << "Could not separate components!" << endl;
-            return;
+    if(dstPixelFormat != tempFormat){
+        // Resamples results to the desired one
+        if(seq_resampler(dstWidth, dstHeight, tempFormat, tempFrame->data, tempFrame->linesize,
+                         dstWidth, dstHeight, dstPixelFormat, dstSlice, dstStride) < 0){
+
+            // Free used resources
+            av_frame_free(&tempFrame);
+            free(tempBuffer);
+
+            cerr << "Could not do conversion, not supported!" << endl;
+            return -1;
+        }
+    } else{
+        // Makes the dstFrame de tempFrame
+        // TODO
     }
-    */
+
+    // Free used resources
+    // Free used resources
+    av_frame_free(&tempFrame);
+    free(tempBuffer);
+
+    return 0;
 }

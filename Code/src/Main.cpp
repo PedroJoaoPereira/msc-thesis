@@ -24,12 +24,13 @@ int main(){
     ImageInfo img01("imgs/uyvy422-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_UYVY422);
     ImageInfo img02("imgs/yuv420p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
     ImageInfo img03("imgs/yuv422p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
+    ImageInfo img04("imgs/yuv444p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV444P);
     // -----------------------------------------------
     // DEBUG VARIABLES -------------------------------
-    int nTimes = 15;
+    int nTimes = 1;
     int operation = SWS_BICUBIC;
-    ImageInfo outImg("imgs/output.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
-    //ImageInfo outImg("imgs/output.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
+    ImageInfo outImg("imgs/output.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
+    //ImageInfo outImg("imgs/output.yuv", 1920, 1080, AV_PIX_FMT_YUV444P);
     // -----------------------------------------------
     // SCALING OPERATIONS ----------------------------
     // Initialize ffmpeg
@@ -37,7 +38,7 @@ int main(){
 
     // Apply the operations
     while(nTimes > 0){
-        //int executionTime = ffmpeg_scale(img01, outImg, operation);
+        //int executionTime = ffmpeg_scale(img04, outImg, operation);
         int executionTime = sequential_scale(img01, outImg, operation);
         if(executionTime < 0){
             cerr << "Could not execute the scaling method!" << endl;
