@@ -633,7 +633,9 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
 
         // Temporary variables for precalculation of coefficients
         PrecisionType(*coefFunc)(PrecisionType) = getCoefMethod<PrecisionType>(operation);
-        int pixelSupport = getPixelSupport(operation, (srcWidth > dstWidth) && (srcHeight > dstHeight));
+        int pixelSupportV = getPixelSupport(operation, max<int>(round((static_cast<PrecisionType>(srcHeight) / static_cast<PrecisionType>(dstHeight)) / static_cast<PrecisionType>(2.)) * 2, 1));
+        int pixelSupportH = getPixelSupport(operation, max<int>(round((static_cast<PrecisionType>(srcWidth) / static_cast<PrecisionType>(dstWidth)) / static_cast<PrecisionType>(2.)) * 2, 1));
+        int pixelSupport = max<int>(pixelSupportV, pixelSupportH);
 
         // Create variables for precalculated coefficients
         PrecisionType** vCoefs;
@@ -711,6 +713,12 @@ int sequential_scale(AVFrame* src, AVFrame* dst, int operation) {
     // Verify valid input dimensions
     if (src->width < 0 || src->height < 0 || dst->width < 0 || dst->height < 0) {
         cerr << "[SEQUENTIAL] Frame dimensions can not be a negative number!" << endl;
+        return -1;
+    }
+    // Verify valid resize
+    if ((src->width < dst->width && src->height > dst->height) ||
+        (src->width > dst->width && src->height < dst->height)) {
+        cerr << "[SEQUENTIAL] Can not upscale in an orientation and downscale another!" << endl;
         return -1;
     }
     // Verify valid input data

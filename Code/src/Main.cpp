@@ -42,7 +42,7 @@ int main(){
 
     // Import all images into a vector
     vector<ImageInfo*> inImgs = vector<ImageInfo*>();
-    inImgs.push_back(img_yuv422p_1920x1080);
+    inImgs.push_back(img_obj_yuv444p_40x40);
     
     // Load all images
     for(int index = 0; index < inImgs.size(); index++)
@@ -52,14 +52,15 @@ int main(){
     vector<ImageInfo*> outImgs = vector<ImageInfo*>();
     //outImgs.push_back(new ImageInfo("imgs/results/", 20, 20, AV_PIX_FMT_YUV444P));
     //outImgs.push_back(new ImageInfo("imgs/results/", 80, 80, AV_PIX_FMT_YUV444P));
-    outImgs.push_back(new ImageInfo("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
+    //outImgs.push_back(new ImageInfo("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
+    outImgs.push_back(new ImageInfo("imgs/results/", 50, 50, AV_PIX_FMT_YUV444P));
 
     // create operations
     vector<int> operations = vector<int>();
     //operations.push_back(SWS_POINT);
-    //operations.push_back(SWS_BILINEAR);
+    operations.push_back(SWS_BILINEAR);
     //operations.push_back(SWS_BICUBIC);
-    operations.push_back(SWS_LANCZOS);
+    //operations.push_back(SWS_LANCZOS);
 
     // Debug variables
     bool isTestFFMPEG = true;

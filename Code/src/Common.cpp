@@ -49,17 +49,17 @@ int lcm(int num1, int num2){
 }
 
 // Return the value of the pixel support depending of the operation
-int getPixelSupport(int operation, bool isDownScale){
+int getPixelSupport(int operation, int scaleRatio){
     // Resize operation with different kernels
     switch(operation){
         case SWS_POINT:
             return 2;
         case SWS_BILINEAR:
-            return 2 * (isDownScale ? 2 : 1);
+            return 2 * scaleRatio;
         case SWS_BICUBIC:
-            return 4 * (isDownScale ? 2 : 1);
+            return 4 * scaleRatio;
         case SWS_LANCZOS:
-            return 6 * (isDownScale ? 2 : 1);;
+            return 6 * scaleRatio;
     }
 
     // Insuccess
