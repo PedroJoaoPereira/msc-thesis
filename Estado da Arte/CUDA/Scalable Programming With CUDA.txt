@@ -1,8 +1,0 @@
-http://delivery.acm.org/10.1145/1370000/1365500/p40-nickolls.pdf?ip=93.108.247.79&id=1365500&acc=OPEN&key=4D4702B0C3E38B35%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35%2E6D218144511F3437&CFID=827141709&CFTOKEN=31521620&__acm__=1510148428_89d29a4a9d732dfa599cd097de4b1be1
-
-CUDA fornece três abstracções essenciais: uma hierarquia entre um grupo de threads, memória partilhada e barreiras de sincronização.
-CUDA é uma extensão mínima das linguagens de programação C e C++.
-Um bloco de threads é um conjunto de threads concurrentes que podem cooperar entre si a partir de barreiras de sincronização e acesso partilhado a um espaço de memória reservado ao bloco.
-Uma grelha é um conjunto de thread blocks que podem ser executandos independetemente e por isso podem ser executados em paralelo.
-Aquando a invocação de um kernel o programador especifica o número de threads por bloco e o número de blocos por grelha.
-Cada thread é atribuído um identificador dentro do seu bloco e cada bloco é atribuído um identificador dentro da sua grelha.
