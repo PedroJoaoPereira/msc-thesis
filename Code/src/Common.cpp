@@ -94,8 +94,9 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
 
     // Fill frame->data and frame->linesize pointers
     if(avpicture_fill((AVPicture*) *frame, *dataBuffer, pixelFormat, width, height) < 0){
-        cerr << "Could not initialize frame!" << endl;
         av_frame_free(&(*frame));
+
+        cerr << "Could not initialize frame!" << endl;
         return -1;
     }
 
@@ -126,4 +127,27 @@ uint8_t float2uint8_t(float value){
 // Convert a float to an int
 int float2int(float value){
     return static_cast<int>(value + 0.5f - (value < 0.f));
+}
+
+// Get a valid pixel from the image
+void getPixel(uint8_t* data, int width, int height, int lin, int col, uint8_t* pixelVal){
+    // Clamp coords
+    clampPixel(lin, 0, height - 1);
+    clampPixel(col, 0, width - 1);
+
+    // Assigns correct value to return
+    *pixelVal = data[lin * width + col];
+}
+
+// Get the bicubic coefficients
+float getBicubicCoef(float x){
+    float a = -0.6f;
+    float xRounded = abs(x);
+    if(xRounded <= 1.0f){
+        return (a + 2.0f) * xRounded * xRounded * xRounded - (a + 3.0f) * xRounded * xRounded + 1.0f;
+    } else if(xRounded < 2.0f){
+        return a * xRounded * xRounded * xRounded - 5.0f * a * xRounded * xRounded + 8.0f * a * xRounded - 4.0f * a;
+    } else{
+        return 0.0f;
+    }
 }

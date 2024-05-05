@@ -3,6 +3,7 @@
 #include "ImageInfo.h"
 #include "FFMPEG_Scale.h"
 #include "Sequential_Scale.h"
+#include "OpenMP_Scale.h"
 
 extern "C"{
 #define __STDC_CONSTANT_MACROS
@@ -19,56 +20,144 @@ int main(){
     // UHD    - 3840 x 2160
     // HD1080 - 1920 x 1080
     // HD720  - 1280 x 720
-    // -----------------------------------------------
+
     // INFO OF IMAGES USED IN TESTS ------------------
-    ImageInfo imgDebug("imgs/color-yuv422p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
+    ImageInfo img00("imgs/color-yuv422p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
+    img00.loadImage();
 
     ImageInfo img01("imgs/uyvy422-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_UYVY422);
-    ImageInfo img02("imgs/yuv420p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
-    ImageInfo img03("imgs/yuv422p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
+    img01.loadImage();
 
-    imgDebug = img02;
-    // -----------------------------------------------
+    ImageInfo img02("imgs/yuv420p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
+    img02.loadImage();
+
+    ImageInfo img03("imgs/yuv422p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
+    img03.loadImage();
+
     // DEBUG VARIABLES -------------------------------
-    int operation = SWS_BICUBIC;
+    ImageInfo inImg = img01;
     int dstWidth = 7680;
     int dstHeight = 4320;
     AVPixelFormat dstFormat = AV_PIX_FMT_YUV422P;
-    ImageInfo outImgFFmpeg("imgs/z-output-ffmpeg.yuv", dstWidth, dstHeight, dstFormat);
-    ImageInfo outImgCustom("imgs/z-output-custom.yuv", dstWidth, dstHeight, dstFormat);
-    // -----------------------------------------------
+    int operation = SWS_BICUBIC;
+
+    int maxTestTimes = 100;
+    bool testAverage = true;
+    bool testFfmpeg = false;
+    bool testSequential = false;
+    bool testOpenmp = true;
+
+    int avgAcc;
+
+    ImageInfo outImgFFmpeg("imgs/!ffmpeg-out.yuv", dstWidth, dstHeight, dstFormat);
+    ImageInfo outImgSequential("imgs/!sequential-out.yuv", dstWidth, dstHeight, dstFormat);
+    ImageInfo outImgOpenMP("imgs/!openmp-out.yuv", dstWidth, dstHeight, dstFormat);
+
     // SCALING OPERATIONS ----------------------------
     // Initialize ffmpeg
     av_register_all();
 
-    // Apply the operations with ffmpeg
-    int nTimes = 1;
-    while(nTimes > 0){
-        int executionTime = ffmpeg_scale(imgDebug, outImgFFmpeg, operation);
-        if(executionTime < 0){
-            cerr << "Could not execute the scaling method!" << endl;
-            system("pause");
-            return -1;
+    // Operate with ffmpeg
+    if(testFfmpeg){
+        // Prepares the average accumulator
+        if(testAverage){
+            avgAcc = 0;
+            cout << "[FFMPEG] Average execution started!" << endl;
         }
 
-        cout << "[FFMPEG] Execution time was " << executionTime << " ms!" << endl;
+        for(int testTimes = maxTestTimes; testTimes > 0; testTimes--){
+            // Reset output frame
+            outImgFFmpeg.initFrame();
 
-        nTimes--;
-    }
+            // Resample and scale
+            int executionTime = ffmpeg_scale(inImg, outImgFFmpeg, operation);
+            if(executionTime < 0){
+                system("pause");
+                return -1;
+            }
 
-    nTimes = 1;
-    while(nTimes > 0){
-        int executionTime = sequential_scale(imgDebug, outImgCustom, operation);
-        if(executionTime < 0){
-            cerr << "Could not execute the scaling method!" << endl;
-            system("pause");
-            return -1;
+            // Display test results
+            if(!testAverage)
+                cout << "[FFMPEG] Execution time was " << executionTime << " ms!" << endl;
+            else
+                avgAcc += executionTime;
         }
 
-        cout << "[CUSTOM] Execution time was " << executionTime << " ms!" << endl;
-
-        nTimes--;
+        // Display averaged results
+        if(testAverage)
+            cout << "[FFMPEG] Average execution time was " << avgAcc / static_cast<double>(maxTestTimes) << " ms!" << endl;
     }
+
+    // Operate with sequential process
+    if(testSequential){
+        // Prepares the average accumulator
+        if(testAverage){
+            avgAcc = 0;
+            cout << "[SEQUENTIAL] Average execution started!" << endl;
+        }
+
+        for(int testTimes = maxTestTimes; testTimes > 0; testTimes--){
+            // Reset output frame
+            outImgSequential.initFrame();
+
+            // Resample and scale
+            int executionTime = sequential_scale(inImg, outImgSequential, operation);
+            if(executionTime < 0){
+                system("pause");
+                return -1;
+            }
+
+            // Display test results
+            if(!testAverage)
+                cout << "[SEQUENTIAL] Execution time was " << executionTime << " ms!" << endl;
+            else
+                avgAcc += executionTime;
+        }
+
+        // Display averaged results
+        if(testAverage)
+            cout << "[SEQUENTIAL] Average execution time was " << avgAcc / static_cast<double>(maxTestTimes) << " ms!" << endl;
+    }
+
+    // Operate with openmp process
+    if(testOpenmp){
+        // Prepares the average accumulator
+        if(testAverage){
+            avgAcc = 0;
+            cout << "[OPENMP] Average execution started!" << endl;
+        }
+
+        for(int testTimes = maxTestTimes; testTimes > 0; testTimes--){
+            // Reset output frame
+            outImgOpenMP.initFrame();
+
+            // Resample and scale
+            int executionTime = openmp_scale(inImg, outImgOpenMP, operation);
+            if(executionTime < 0){
+                system("pause");
+                return -1;
+            }
+
+            // Display test results
+            if(!testAverage)
+                cout << "[OPENMP] Execution time was " << executionTime << " ms!" << endl;
+            else
+                avgAcc += executionTime;
+        }
+
+        // Display averaged results
+        if(testAverage)
+            cout << "[OPENMP] Average execution time was " << avgAcc / static_cast<double>(maxTestTimes) << " ms!" << endl;
+    }
+
+    // Write results
+    cout << endl << ">> Writing images to files!" << endl << endl;
+    if(testFfmpeg)
+        outImgFFmpeg.writeImage();
+    if(testSequential)
+        outImgSequential.writeImage();
+    if(testOpenmp)
+        outImgOpenMP.writeImage();
 
     system("pause");
     return 0;

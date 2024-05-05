@@ -56,4 +56,17 @@ uint8_t float2uint8_t(float value);
 // Convert a float to an int
 int float2int(float value);
 
+// uint8_t* data        - image data to retrieve color from
+// int width            - width of the image
+// int height           - height of the image
+// int lin              - line coordinate of pixel to retrieve
+// int col              - column coordinate of pixel to retrieve
+// uint8_t* pixelVal    - value that will be filled with the retrieved color
+// Get a valid pixel from the image
+void getPixel(uint8_t* data, int width, int height, int lin, int col, uint8_t* pixelVal);
+
+// float x  - distance to the neighboring pixel
+// Get the bicubic coefficients
+float getBicubicCoef(float x);
+
 #endif
