@@ -2,13 +2,13 @@
 
 // Modify the color model of the image
 template <class PrecisionType>
-int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
-    int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]) {
+int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
+    int dstWidth, int dstHeight, int dstPixelFormat, uint8_t* dstSlice[], int dstStride[]) {
 
     // If same formats no need to resample
     if (srcPixelFormat == dstPixelFormat) {
         // Copy data between buffers
-        if(srcPixelFormat == AV_PIX_FMT_NONE) // V210
+        if(srcPixelFormat == AV_PIX_FMT_V210)
             memcpy(dstSlice[0], srcSlice[0], ((srcWidth + 47) / 48) * 128 * srcHeight);
         else
             memcpy(dstSlice[0], srcSlice[0], srcStride[0] * srcHeight);
@@ -148,7 +148,7 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
         return 0;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NONE){ // V210
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210){
         // Number of elements
         long numElements = srcStride[0] * srcHeight / 12;
 
@@ -291,7 +291,7 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
         return 0;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NONE){ // V210
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210){
         // Number of elements
         long numElements = srcStride[0] * srcHeight / 6;
 
@@ -331,7 +331,7 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
         return 0;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_NONE && dstPixelFormat == AV_PIX_FMT_UYVY422){ // V210
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Number of elements
         long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
 
@@ -384,7 +384,7 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
         return 0;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_NONE && dstPixelFormat == AV_PIX_FMT_YUV422P){ // V210
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422P){
         // Number of elements
         long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
 
@@ -572,9 +572,9 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
 
     // Access once
     int srcWidth = src->width, srcHeight = src->height;
-    AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
+    int srcFormat = src->format;
     int dstWidth = dst->width, dstHeight = dst->height;
-    AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
+    int dstFormat = dst->format;
 
     // Check if is only a resample operation
     bool isOnlyResample = false;
@@ -582,7 +582,7 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         isOnlyResample = true;
 
     // Initialize needed variables if it is a scaling operation
-    AVPixelFormat scalingSupportedFormat = getTempScaleFormat(srcFormat);
+    int scalingSupportedFormat = getTempScaleFormat(srcFormat);
 
 #pragma region INITIALIZE TEMPORARY FRAMES
     // Temporary frames used in intermediate operations
@@ -616,7 +616,7 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
 
     // Last resample frame
     AVFrame* lastResampleFrame = src;
-    AVPixelFormat lastResamplePixelFormat = srcFormat;
+    int lastResamplePixelFormat = srcFormat;
 
 #pragma region RESIZE OPERATION
     // Verify if is not only a resample operation

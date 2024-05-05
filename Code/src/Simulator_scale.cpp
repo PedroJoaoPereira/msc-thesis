@@ -2,8 +2,8 @@
 
 // Modify the color model of the image
 template <class PrecisionType>
-int simulator_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
-              int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]){
+int simulator_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
+              int dstWidth, int dstHeight, int dstPixelFormat, uint8_t* dstSlice[], int dstStride[]){
 
     // If same formats no need to resample
     if(srcPixelFormat == dstPixelFormat){
@@ -326,8 +326,8 @@ int simulator_scale(AVFrame* src, AVFrame* dst, int operation){
     // Variables used
     int retVal = -1, duration = -1;
     high_resolution_clock::time_point initTime, stopTime;
-    AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
-    AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
+    int srcFormat = src->format;
+    int dstFormat = dst->format;
 
     // Verify valid input dimensions
     if(src->width < 0 || src->height < 0 || dst->width < 0 || dst->height < 0){

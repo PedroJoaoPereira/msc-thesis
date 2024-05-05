@@ -18,12 +18,12 @@ class ImageInfo{
     string fileName;
     int width;
     int height;
-    AVPixelFormat pixelFormat;
+    int pixelFormat;
     uint8_t* frameBuffer;
     AVFrame* frame;
 
     // Constructor
-    ImageInfo(string fileName, int width, int height, AVPixelFormat pixelFormat);
+    ImageInfo(string fileName, int width, int height, int pixelFormat);
 
     // Load image into avframe
     void loadImage();

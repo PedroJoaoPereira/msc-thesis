@@ -1,7 +1,7 @@
 #include "ImageInfo.h"
 
 // Constructor
-ImageInfo::ImageInfo(string fileName, int width, int height, AVPixelFormat pixelFormat){
+ImageInfo::ImageInfo(string fileName, int width, int height, int pixelFormat){
     this->fileName = fileName;
     this->width = width;
     this->height = height;
