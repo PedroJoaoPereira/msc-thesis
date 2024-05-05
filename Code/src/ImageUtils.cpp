@@ -19,7 +19,6 @@ bool isSupportedOperation(int operation){
 bool isSupportedFormat(int format){
     // Verify if supported format
     switch(format){
-    case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_UYVY422:
     case AV_PIX_FMT_YUV422P:
     case AV_PIX_FMT_YUV420P:
@@ -41,8 +40,6 @@ int getTempScaleFormat(int inFormat, int outFormat){
 
     // Retrieve the temporary scale format
     switch(inFormat){
-    case AV_PIX_FMT_YUV444P:
-        return AV_PIX_FMT_YUV444P;
     case AV_PIX_FMT_YUV422P:
         return AV_PIX_FMT_YUV422P;
     case AV_PIX_FMT_YUV420P:
