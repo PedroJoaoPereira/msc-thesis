@@ -132,3 +132,4 @@ uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data){
     // Assigns correct value to return
     return data[lin * width + col];
 }
+

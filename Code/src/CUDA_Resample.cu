@@ -2,8 +2,7 @@
 
 // Allocate image channels data buffers depending of the pixel format
 void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height, int pixelFormat){
-    // Allocate channel buffer pointers
-    buffer = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    // Allocate channel buffer size
     bufferSize = static_cast<int*>(malloc(3 * sizeof(int)));
 
     // Calculate once
@@ -40,7 +39,7 @@ void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height
         break;
     case AV_PIX_FMT_NV12:
         bufferSize[0] = wxh;
-        bufferSize[1] = wxh;
+        bufferSize[1] = wxhDi2;
         bufferSize[2] = 0;
         break;
     case AV_PIX_FMT_V210:
@@ -49,6 +48,9 @@ void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height
         bufferSize[2] = 0;
         break;
     }
+
+    // Allocate buffer memory
+    buffer = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
 
     // Allocate buffer in the GPU memory
     cudaMalloc((void **) &buffer[0], bufferSize[0]);
@@ -92,66 +94,214 @@ void cudaCopyBuffersFromGPU(uint8_t* targetBuffer[], uint8_t* gpuBuffer[], int* 
         cudaMemcpy(targetBuffer[2], gpuBuffer[2], bufferSize[2], cudaMemcpyDeviceToHost);
 }
 
+// Calculate launch parameters of format conversion kernel
+pair<dim3, dim3> calculateConversionLP(int width, int height, int srcPixelFormat, int dstPixelFormat){
+    // Variable with result launch parameters
+    pair<dim3, dim3> result;
+
+    // Discover dimensions value depending of the conversion
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422)
+        result.first = dim3(width * 2, height);
+    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P)
+        result.first = dim3(width * 2, height);
+    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P)
+        result.first = dim3(width * 2, height);
+    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12)
+        result.first = dim3(width * 2, height);
+    else if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210)
+        result.first = dim3(width * 2 / 3, height);
+    else if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422)
+        result.first = dim3(width / 2, height);
+
+    // Calculate thread size
+    int hDivisor = greatestDivisor(result.first.x, 16);
+    int vDivisor = greatestDivisor(result.first.y, 16);
+
+    // Assign thread size
+    result.second = dim3(hDivisor, vDivisor);
+
+    // Calculate block size
+    result.first.x /= hDivisor;
+    result.first.y /= vDivisor;
+
+    return result;
+}
+
 // Convert the pixel format of the image
 template <class PrecisionType>
-__global__ void cuda_formatConversion(int srcWidth, int srcHeight,
+__global__ void cuda_formatConversion(int width, int height,
     int srcPixelFormat, uint8_t* srcSlice0, uint8_t* srcSlice1, uint8_t* srcSlice2,
     int dstPixelFormat, uint8_t* dstSlice0, uint8_t* dstSlice1, uint8_t* dstSlice2){
 
     // REORGANIZE COMPONENTS -------------------------
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Calculate pixel location
+        int lin = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+        // Calculate once
+        int offset = lin * width * 2 + col;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + offset;
+        auto dstBuffer = dstSlice0 + offset;
+
+        *dstBuffer = *srcBuffer;
+
+        return;
+    }
+
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
         // Calculate pixel location
-        /*
-        int lin = (blockIdx.y * blockDim.y) + threadIdx.y;
-        int col = (blockIdx.x * blockDim.x) + threadIdx.x;
+        int lin = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-        // Source index calculation
-        int sourceIndex = lin * srcWidth + col;
+        // Calculate once
+        int whichCol = threadIdx.x % 4;
+        int linMulWidth = lin * width;
 
-        // Get the value from source data
-        PrecisionType val = static_cast<PrecisionType>(srcSlice0[sourceIndex]);
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidth * 2 + col;
 
-        // Discover what type of value it is
-        int whatValueIs = col % 4;
-
-        switch(whatValueIs){
-        case 0: // U0
-            dstSlice1[lin * srcWidth + col / 4] = val;
+        // Discover which component pixel is
+        if(whichCol == 0){
+            auto dstBuffer = dstSlice1 + linMulWidth / 2 + col / 4;
+            *dstBuffer = *srcBuffer;
             return;
-        case 1: // Y0
-            dstSlice0[lin * srcWidth + col / 2] = val;
-            return;
-        case 2: // V0
-            dstSlice2[lin * srcWidth + col / 4] = val;
-            return;
-        case 3: // Y1
-            dstSlice0[lin * srcWidth + col / 2] = val;
-            return;
-        }*/
-
-
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 2;
-
-        // Buffer pointers
-        auto srcBuffer = srcSlice0;
-        auto dstBuffer = dstSlice0;
-        auto dstBufferChromaU = dstSlice1;
-        auto dstBufferChromaV = dstSlice2;
-
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
-            PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
-            PrecisionType v0 = static_cast<PrecisionType>(*srcBuffer++); // V0
-            PrecisionType y1 = static_cast<PrecisionType>(*srcBuffer++); // Y1
-
-            *dstBuffer++ = y0;
-            *dstBuffer++ = y1;
-
-            *dstBufferChromaU++ = u0;
-            *dstBufferChromaV++ = v0;
         }
+        if(whichCol == 1){
+            auto dstBuffer = dstSlice0 + linMulWidth + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 2){
+            auto dstBuffer = dstSlice2 + linMulWidth / 2 + col / 4;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 3){
+            auto dstBuffer = dstSlice0 + linMulWidth + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Calculate pixel location
+        int lin = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+        // Calculate once
+        int whichCol = threadIdx.x % 4;
+        int linMulWidth = lin * width;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidth * 2 + col;
+
+        // Discover which component pixel is
+        if(whichCol == 0 && lin % 2 == 0){
+            auto dstBuffer = dstSlice1 + linMulWidth / 4 + col / 4;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 1){
+            auto dstBuffer = dstSlice0 + linMulWidth + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 2 && lin % 2 == 0){
+            auto dstBuffer = dstSlice2 + linMulWidth / 4 + col / 4;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 3){
+            auto dstBuffer = dstSlice0 + linMulWidth + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Calculate pixel location
+        int lin = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+        // Calculate once
+        int whichCol = threadIdx.x % 4;
+        int linMulWidth = lin * width;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidth * 2 + col;
+
+        // Discover which component pixel is
+        if(whichCol == 0 && lin % 2 == 0){
+            auto dstBuffer = dstSlice1 + linMulWidth / 2 + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 1){
+            auto dstBuffer = dstSlice0 + linMulWidth + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 2 && lin % 2 == 0){
+            auto dstBuffer = dstSlice1 + linMulWidth / 2 + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+        if(whichCol == 3){
+            auto dstBuffer = dstSlice0 + linMulWidth + col / 2;
+            *dstBuffer = *srcBuffer;
+            return;
+        }
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210){
+        // Calculate pixel location
+        int lin = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+        // Calculate once
+        int linMulWidth = lin * width;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidth * 2 + col * 3;
+        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice0);
+        dstBuffer += linMulWidth / 6 * 4 + col;
+
+        // Upsample to 10 bits
+        auto valA10b = *srcBuffer++ << 2U;
+        auto valB10b = *srcBuffer++ << 2U;
+        auto valC10b = *srcBuffer++ << 2U;
+
+        // Assign value
+        *dstBuffer = (valC10b << 20U) | (valB10b << 10U) | valA10b;
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Calculate pixel location
+        int lin = blockIdx.y * blockDim.y + threadIdx.y;
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+        // Calculate once
+        int linMulWidth = lin * width;
+        int linMulWidthDiv2 = linMulWidth / 2;
+
+        // Calculate source index
+        auto srcBuffer = srcSlice0 + linMulWidth + col * 2;
+        auto srcBufferChromaU = srcSlice1 + linMulWidthDiv2 + col;
+        auto srcBufferChromaV = srcSlice2 + linMulWidthDiv2 + col;
+        auto dstBuffer = dstSlice0 + linMulWidth * 2 + col * 4;
+
+        // Assigne values to dst buffer
+        *dstBuffer++ = *srcBufferChromaU; // U0
+        *dstBuffer++ = *srcBuffer++; // Y0
+        *dstBuffer++ = *srcBufferChromaV; // V0
+        *dstBuffer++ = *srcBuffer; // Y1
+
+        return;
     }
 }
 
@@ -333,16 +483,17 @@ int cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     // Initialize needed variables if it is a scaling operation
     int scalingSupportedFormat = getTempScaleFormat(srcFormat, dstFormat);
 
+    // Last format conversion variables
+    uint8_t** lastConversion;
+    int* lastConversionSizes;
+    int lastConversionPixelFormat = srcFormat;
+    // Allocate buffer
+    cudaAllocBuffers(lastConversion, lastConversionSizes, srcWidth, srcHeight, srcFormat);
+    // Copy source data to GPU
+    cudaCopyBuffersToGPU(src->data, lastConversion, lastConversionSizes);
+
     // Temporary buffers used in intermediate operations
     uint8_t** formatConversionBuffer, **resizeBuffer;
-
-    // Last format conversion buffers
-    uint8_t** lastFormatConversionBuffer;
-    int* lastFormatConversionBufferSize;
-    int lastFormatConversionPixelFormat = srcFormat;
-    // Allocate above buffer
-    cudaAllocBuffers(lastFormatConversionBuffer, lastFormatConversionBufferSize, srcWidth, srcHeight, srcFormat);
-    cudaCopyBuffersToGPU(src->data, lastFormatConversionBuffer, lastFormatConversionBufferSize);
 
     // Rescaling operation branch
     if(!isOnlyFormatConversion){
@@ -407,21 +558,24 @@ int cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     }
 
     // Result data buffer
-    uint8_t** resultBuffer;
-    int* resultBufferSize;
-    // Allocate above buffer
-    cudaAllocBuffers(resultBuffer, resultBufferSize, dstWidth, dstHeight, dstFormat);
+    uint8_t** finalData;
+    int* finalDataSizes;
+    // Allocate buffer
+    cudaAllocBuffers(finalData, finalDataSizes, dstWidth, dstHeight, dstFormat);
 
+    // Create launch parameters of format conversion kernel
+    pair<dim3, dim3> formatConversionLP = calculateConversionLP(dstWidth, dstHeight, lastConversionPixelFormat, dstFormat);
     // Resamples image to a target format
-    cuda_formatConversion<PrecisionType> << <1, 1>> > (dstWidth, dstHeight,
-        lastFormatConversionPixelFormat, lastFormatConversionBuffer[0], lastFormatConversionBuffer[1], lastFormatConversionBuffer[2],
-        dstFormat, resultBuffer[0], resultBuffer[1], resultBuffer[2]);
+    cuda_formatConversion<PrecisionType> << <formatConversionLP.first, formatConversionLP.second>> > (dstWidth, dstHeight,
+        lastConversionPixelFormat, lastConversion[0], lastConversion[1], lastConversion[2],
+        dstFormat, finalData[0], finalData[1], finalData[2]);
 
-    cudaCopyBuffersFromGPU(dst->data, resultBuffer, resultBufferSize);
+    // Copy resulting data to CPU
+    cudaCopyBuffersFromGPU(dst->data, finalData, finalDataSizes);
 
     // Free used resources
-    freeCudaMemory(lastFormatConversionBuffer);
-    freeCudaMemory(resultBuffer);
+    freeCudaMemory(lastConversion);
+    freeCudaMemory(finalData);
 
     END:
     // Free used resources

@@ -35,8 +35,20 @@ int main(){
     ImageClass* img_uyvy422_1920x1080 = new ImageClass("imgs/bbb-uyvy422-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_UYVY422);
     ImageClass* img_v210_1920x1080 = new ImageClass("imgs/bbb-v210-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_V210);
 
+    // Initialize execution
+    cout << "[MAIN] Program just started!" << endl;
+
     // Initialize ffmpeg
     av_register_all();
+
+    // Initialize GPU activity
+    high_resolution_clock::time_point initTime, stopTime;
+    initTime = high_resolution_clock::now();
+    cudaFree(0);
+    stopTime = high_resolution_clock::now();
+
+    // Display how much time took GPU initializaion
+    cout << "[CUDA] GPU initialization took " << duration_cast<milliseconds>(stopTime - initTime).count() << " ms!" << endl << endl;
 
     // Import all images into a vector
     vector<ImageClass*> allImgs = vector<ImageClass*>();
@@ -64,25 +76,23 @@ int main(){
     vector<ImageClass*> uyvy422ResampleInImgs = vector<ImageClass*>();
     uyvy422ResampleInImgs.push_back(img_uyvy422_1920x1080);
     vector<ImageClass*> uyvy422ResampleOutImgs = vector<ImageClass*>();
-    //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-    uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
+    //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
     //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
     //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
     //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
-    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, uyvy422ResampleInImgs, uyvy422ResampleOutImgs, resampleOperations, nTimes);
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, uyvy422ResampleInImgs, uyvy422ResampleOutImgs, resampleOperations, nTimes);
 
     // RESAMPLE YUV422P ---------------------------------------------
     vector<ImageClass*> yuv422pResampleInImgs = vector<ImageClass*>();
     yuv422pResampleInImgs.push_back(img_yuv422p_1920x1080);
     vector<ImageClass*> yuv422pResampleOutImgs = vector<ImageClass*>();
-    yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-    yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
+    //yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
     yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
-    yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
-    yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
+    //yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
+    //yuv422pResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
-    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, yuv422pResampleInImgs, yuv422pResampleOutImgs, resampleOperations, nTimes);
+    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, yuv422pResampleInImgs, yuv422pResampleOutImgs, resampleOperations, nTimes);
 
     // RESAMPLE V210 ------------------------------------------------
     vector<ImageClass*> v210ResampleInImgs = vector<ImageClass*>();
@@ -91,7 +101,6 @@ int main(){
     v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
     v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
     v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422PNORM));
-    v210ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
     //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, v210ResampleInImgs, v210ResampleOutImgs, resampleOperations, nTimes);
 

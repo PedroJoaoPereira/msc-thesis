@@ -6,6 +6,11 @@
 // Return least common multiple of two integers
 int lcm(int num1, int num2);
 
+// int num1 - integer value
+// int num2 - integer value
+// Return the nearest value of num2 that is a divisor of num1
+int greatestDivisor(int num1, int num2);
+
 // TEMPLATES
 
 // PrecisionType num1   - first value
