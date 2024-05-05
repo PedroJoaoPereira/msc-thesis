@@ -130,6 +130,8 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, int pixelForm
 
 // Constructor
 ImageClass::ImageClass(string fileName, int width, int height, int pixelFormat){
+    isInitialized = false;
+
     this->fileName = fileName;
     this->width = width;
     this->height = height;
@@ -150,6 +152,11 @@ void ImageClass::loadImage(){
 
 // Create frame
 void ImageClass::initFrame(){
+    if(isInitialized)
+        return;
+
+    isInitialized = true;
+
     // Prepare to initialize frame
     if(createImageDataBuffer(width, height, pixelFormat, &frameBuffer) < 0)
         return;
@@ -163,8 +170,8 @@ void ImageClass::initFrame(){
 // Write image into a file
 void ImageClass::writeImage(){
     // Write image to file
-    if(writeImageToFile(fileName, &frame) < 0){
-        av_frame_free(&frame);
-        free(frameBuffer);
-    }
+    writeImageToFile(fileName, &frame);
+
+    av_frame_free(&frame);
+    free(frameBuffer);
 }
