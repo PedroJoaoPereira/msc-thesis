@@ -1,93 +1,4 @@
-#include "Common.h"
-
-// Return if operation is supported
-bool isSupportedOperation(int operation){
-    // Verify if supported operation
-    switch(operation){
-        case SWS_POINT:
-        case SWS_BILINEAR:
-        case SWS_BICUBIC:
-        case SWS_LANCZOS:
-            return true;
-    }
-
-    // Not a supported operation
-    return false;
-}
-
-// Return if format is supported
-bool isSupportedFormat(int format){
-    // Verify if supported format
-    switch(format){
-        case AV_PIX_FMT_YUV444P:
-        case AV_PIX_FMT_UYVY422:
-        case AV_PIX_FMT_YUV422P:
-        case AV_PIX_FMT_YUV420P:
-        case AV_PIX_FMT_NV12:
-        case AV_PIX_FMT_V210:
-        case AV_PIX_FMT_YUV422PNORM:
-            return true;
-    }
-
-    // Not a supported format
-    return false;
-}
-
-// Return least common multiple of two integers
-int lcm(int num1, int num2){
-    // Find the greater value of the two
-    int max = (num1 > num2) ? num1 : num2;
-
-    do{
-        if(max % num1 == 0 && max % num2 == 0)
-            return max;
-
-        max++;
-    } while(max < num1 * num2);
-
-    // Insuccess
-    return num1 * num2;
-}
-
-// Return the value of the pixel support depending of the operation
-int getPixelSupport(int operation, int scaleRatio){
-    // Resize operation with different kernels
-    switch(operation){
-        case SWS_POINT:
-            return 2;
-        case SWS_BILINEAR:
-            return 2 * 1;
-        case SWS_BICUBIC:
-            return 4 * 1;
-        case SWS_LANCZOS:
-            return 6 * 1;
-    }
-
-    // Insuccess
-    return -1;
-}
-
-// Return the temporary scale pixel format
-int getTempScaleFormat(int inFormat){
-    // Retrieve the temporary scale format
-    switch(inFormat){
-        case AV_PIX_FMT_YUV444P:
-            return AV_PIX_FMT_YUV444P;
-        case AV_PIX_FMT_YUV422P:
-            return AV_PIX_FMT_YUV422P;
-        case AV_PIX_FMT_YUV420P:
-            return AV_PIX_FMT_YUV420P;
-        case AV_PIX_FMT_UYVY422:
-            return AV_PIX_FMT_YUV422P;
-        case AV_PIX_FMT_NV12:
-            return AV_PIX_FMT_YUV420P;
-        case AV_PIX_FMT_V210:
-            return AV_PIX_FMT_YUV422P;
-    }
-
-    // If the source pixel format is not supported
-    return AV_PIX_FMT_NONE;
-}
+#include "ImageClass.h"
 
 // Read image from a file
 int readImageFromFile(string fileName, uint8_t** dataBuffer){
@@ -130,7 +41,7 @@ int readImageFromFile(string fileName, uint8_t** dataBuffer){
 int writeImageToFile(string fileName, AVFrame** frame){
     // Change pixel format if it is fundamentally the same
     int pixelFormat = (*frame)->format;
-    if (pixelFormat == AV_PIX_FMT_YUV422PNORM)
+    if(pixelFormat == AV_PIX_FMT_YUV422PNORM)
         pixelFormat = AV_PIX_FMT_YUV422P;
 
     // Opens output file
@@ -162,12 +73,12 @@ int writeImageToFile(string fileName, AVFrame** frame){
 // Create data buffer to hold image
 int createImageDataBuffer(int width, int height, int pixelFormat, uint8_t** dataBuffer){
     // Change pixel format if it is fundamentally the same
-    if (pixelFormat == AV_PIX_FMT_YUV422PNORM)
+    if(pixelFormat == AV_PIX_FMT_YUV422PNORM)
         pixelFormat = AV_PIX_FMT_YUV422P;
 
     // Calculate the number of elements of the image
     int numElements;
-    if (pixelFormat != AV_PIX_FMT_V210)
+    if(pixelFormat != AV_PIX_FMT_V210)
         numElements = avpicture_get_size((AVPixelFormat) pixelFormat, width, height);
 
     // Allocate buffer of the frame
@@ -199,7 +110,7 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, int pixelForm
     (*frame)->format = pixelFormat;
 
     // Change pixel format if it is fundamentally the same
-    if (pixelFormat == AV_PIX_FMT_YUV422PNORM)
+    if(pixelFormat == AV_PIX_FMT_YUV422PNORM)
         pixelFormat = AV_PIX_FMT_YUV422P;
 
     // Fill frame->data and frame->linesize pointers
@@ -217,12 +128,43 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, int pixelForm
     return 0;
 }
 
-// Get a valid pixel from the image
-uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data){
-    // Clamp coords
-    clamp<int>(lin, 0, height - 1);
-    clamp<int>(col, 0, width - 1);
+// Constructor
+ImageClass::ImageClass(string fileName, int width, int height, int pixelFormat){
+    this->fileName = fileName;
+    this->width = width;
+    this->height = height;
+    this->pixelFormat = pixelFormat;
+}
 
-    // Assigns correct value to return
-    return data[lin * width + col];
+// Load image into avframe
+void ImageClass::loadImage(){
+    // Read image from a file
+    if(readImageFromFile(fileName, &frameBuffer) < 0)
+        return;
+
+    // Initialize frame
+    if(initializeAVFrame(&frameBuffer, width, height, pixelFormat, &frame) < 0){
+        free(frameBuffer);
+    }
+}
+
+// Create frame
+void ImageClass::initFrame(){
+    // Prepare to initialize frame
+    if(createImageDataBuffer(width, height, pixelFormat, &frameBuffer) < 0)
+        return;
+
+    // Initialize frame
+    if(initializeAVFrame(&frameBuffer, width, height, pixelFormat, &frame) < 0){
+        free(frameBuffer);
+    }
+}
+
+// Write image into a file
+void ImageClass::writeImage(){
+    // Write image to file
+    if(writeImageToFile(fileName, &frame) < 0){
+        av_frame_free(&frame);
+        free(frameBuffer);
+    }
 }

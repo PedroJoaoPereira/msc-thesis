@@ -1,18 +1,15 @@
-#ifndef COMMON_H
-#define COMMON_H
+#ifndef IMAGE_UTILS_H
+#define IMAGE_UTILS_H
 
 #include <iostream>
-#include <string>
 
 extern "C"{
-#define __STDC_CONSTANT_MACROS
-#include <libavformat/avformat.h>
-#include <libswscale/swscale.h>
+    #define __STDC_CONSTANT_MACROS
+    #include <libavformat/avformat.h>
+    #include <libswscale/swscale.h>
 }
 
-using namespace std;
-
-// Define some pixel formats
+// Define pixel formats
 #define AV_PIX_FMT_V210 -2
 #define AV_PIX_FMT_YUV422PNORM -3
 
@@ -24,44 +21,21 @@ bool isSupportedOperation(int operation);
 // Return if format is supported
 bool isSupportedFormat(int format);
 
-// int num1 - integer value
-// int num2 - integer value
-// Return least common multiple of two integers
-int lcm(int num1, int num2);
+// int inFormat	    - pixel format of the source data
+// int outFormat    - pixel format of the target data
+// Return the temporary scale pixel format
+int getTempScaleFormat(int inFormat, int outFormat);
 
 // int operation    - value to be clamped
-// int scaleRatio   - the nearest integer value of the scaling ratio
 // Return the value of the pixel support depending of the operation
-int getPixelSupport(int operation, int scaleRatio);
+int getPixelSupport(int operation);
 
-// int inFormat	- pixel format of the source data
-// Return the temporary scale pixel format
-int getTempScaleFormat(int inFormat);
-
-// string fileName          - path of the image file
-// uint8_t** dataBuffer    - buffer that will contain the data
-// Read image from a file
-int readImageFromFile(string fileName, uint8_t** dataBuffer);
-
-// string fileName  - path of the image file
-// AVFrame* frame   - frame to be written in the file
-// Write image to a file
-int writeImageToFile(string fileName, AVFrame** frame);
-
+// uint8_t** &buffer    - buffer to be allocated
 // int width            - width of the image
 // int height           - height of the image
-// int pixelFormat      - pixel format of the image
-// uint8_t** dataBuffer - buffer that will contain the data
-// Create data buffer to hold image
-int createImageDataBuffer(int width, int height, int pixelFormat, uint8_t** dataBuffer);
-
-// uint8_t** dataBuffer - image data to transfer to the AVFrame
-// int width            - width of the image
-// int height           - height of the image
-// int pixelFormat      - pixel format of the image
-// AVFrame* frame       - resulting AVframe properly initialized
-// Initialize and transfer data to AVFrame
-int initializeAVFrame(uint8_t** dataBuffer, int width, int height, int pixelFormat, AVFrame** frame);
+// int pixelFormat      - pixel format of the image to be allocated
+// Allocate image channels data buffers depending of the pixel format
+void allocBuffers(uint8_t** &buffer, int width, int height, int pixelFormat);
 
 // int lin              - line coordinate of pixel to retrieve
 // int col              - column coordinate of pixel to retrieve
@@ -73,22 +47,11 @@ uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data);
 
 // TEMPLATES
 
-// PrecisionType num1   - first value
-// PrecisionType num2   - second value
-// Return the minimum number of two values
-template <class PrecisionType>
-PrecisionType min(PrecisionType num1, PrecisionType num2);
-
-// PrecisionType num1   - first value
-// PrecisionType num2   - second value
-// Return the maximum number of two values
-template <class PrecisionType>
-PrecisionType max(PrecisionType num1, PrecisionType num2);
-
-// int operation    - value to be clamped
-// Return coefficient function calculator
-template <class PrecisionType>
-PrecisionType(*getCoefMethod(int operation))(PrecisionType);
+// DataType** &buffer    - buffer to be freed
+// int bufferSize       - size of the buffer to be freed
+// Free the 2d buffer resources
+template <class DataType>
+void free2dBuffer(DataType** &buffer, int bufferSize);
 
 // PrecisionType* val   - value to be clamped
 // PrecisionType min    - minimum limit of clamping
@@ -101,6 +64,11 @@ void clamp(PrecisionType &val, PrecisionType min, PrecisionType max);
 // Convert a floating point value to fixed point
 template <class DataType, class PrecisionType>
 DataType roundTo(PrecisionType value);
+
+// int operation    - value to be clamped
+// Return coefficient function calculator
+template <class PrecisionType>
+PrecisionType(*getCoefMethod(int operation))(PrecisionType);
 
 // PrecisionType val    - distance value to calculate coefficient from
 // Calculate nearest neighbor interpolation coefficient from a distance
@@ -123,6 +91,6 @@ template <class PrecisionType>
 PrecisionType LanczosCoefficient(PrecisionType val);
 
 // Include template methods implementations
-#include "Common.hpp"
+#include "ImageUtils.hpp"
 
 #endif

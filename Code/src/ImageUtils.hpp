@@ -1,34 +1,14 @@
-#include "Common.h"
+#include "ImageUtils.h"
 
-// Return the minimum number of two values
-template <class PrecisionType>
-PrecisionType min(PrecisionType num1, PrecisionType num2){
-    return (num1 > num2) ? num2 : num1;
-}
+// Free the 2d buffer resources
+template <class DataType>
+void free2dBuffer(DataType** &buffer, int bufferSize){
+    // Free nested buffers first
+    for(int i = 0; i < bufferSize; i++)
+        free(buffer[i]);
 
-// Return the maximum number of two values
-template <class PrecisionType>
-PrecisionType max(PrecisionType num1, PrecisionType num2) {
-    return (num1 < num2) ? num2 : num1;
-}
-
-// Return coefficient function calculator
-template <class PrecisionType>
-PrecisionType(*getCoefMethod(int operation))(PrecisionType){
-    // Resize operation with different kernels
-    switch(operation){
-        case SWS_POINT:
-            return &NearestNeighborCoefficient<PrecisionType>;
-        case SWS_BILINEAR:
-            return &BilinearCoefficient<PrecisionType>;
-        case SWS_BICUBIC:
-            return &MitchellCoefficient<PrecisionType>;
-        case SWS_LANCZOS:
-            return &LanczosCoefficient<PrecisionType>;
-    }
-
-    // Insuccess
-    return nullptr;
+    // Free main buffer
+    free(buffer);
 }
 
 // Limit a value to a defined interval
@@ -44,6 +24,25 @@ void clamp(PrecisionType &val, PrecisionType min, PrecisionType max){
 template <class DataType, class PrecisionType>
 DataType roundTo(PrecisionType value){
     return static_cast<DataType>(value + static_cast<PrecisionType>(0.5) - (value < static_cast<PrecisionType>(0.)));
+}
+
+// Return coefficient function calculator
+template <class PrecisionType>
+PrecisionType(*getCoefMethod(int operation))(PrecisionType){
+    // Resize operation with different kernels
+    switch(operation){
+    case SWS_POINT:
+        return &NearestNeighborCoefficient<PrecisionType>;
+    case SWS_BILINEAR:
+        return &BilinearCoefficient<PrecisionType>;
+    case SWS_BICUBIC:
+        return &MitchellCoefficient<PrecisionType>;
+    case SWS_LANCZOS:
+        return &LanczosCoefficient<PrecisionType>;
+    }
+
+    // Insuccess
+    return nullptr;
 }
 
 // Calculate nearest neighbor interpolation coefficient from a distance
@@ -92,13 +91,13 @@ PrecisionType MitchellCoefficient(PrecisionType val){
         return val1div6 *
         ((static_cast<PrecisionType>(12.) - static_cast<PrecisionType>(9.) * B - static_cast<PrecisionType>(6.) * C) * valAbs3 +
         (static_cast<PrecisionType>(12.) * B + static_cast<PrecisionType>(6.) * C - static_cast<PrecisionType>(18.)) * valAbs2 +
-         (static_cast<PrecisionType>(6.) - static_cast<PrecisionType>(2.) * B));
+            (static_cast<PrecisionType>(6.) - static_cast<PrecisionType>(2.) * B));
     else if(valAbs < static_cast<PrecisionType>(2.))
         return val1div6 *
         ((-B - static_cast<PrecisionType>(6.) * C) * valAbs3 +
         (static_cast<PrecisionType>(6.) * B + static_cast<PrecisionType>(30.) * C) * valAbs2 +
-         (-static_cast<PrecisionType>(12.) * B - static_cast<PrecisionType>(48.) * C) * valAbs +
-         (static_cast<PrecisionType>(8.) * B + static_cast<PrecisionType>(24.) * C));
+            (-static_cast<PrecisionType>(12.) * B - static_cast<PrecisionType>(48.) * C) * valAbs +
+            (static_cast<PrecisionType>(8.) * B + static_cast<PrecisionType>(24.) * C));
     else
         return static_cast<PrecisionType>(0.);
 }
