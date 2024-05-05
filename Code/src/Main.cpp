@@ -45,7 +45,7 @@ int main(){
 
     // Import all images into a vector
     vector<ImageClass*> allImgs = vector<ImageClass*>();
-    allImgs.push_back(img_uyvy422_1920x1080);
+    //allImgs.push_back(img_uyvy422_1920x1080);
     //allImgs.push_back(img_yuv422p_1920x1080);
     //allImgs.push_back(img_yuv420p_1920x1080);
     //allImgs.push_back(img_nv12_1920x1080);
@@ -68,7 +68,7 @@ int main(){
 
     // Create format conversions output images
     vector<ImageClass*> formatConversionOutImgs = vector<ImageClass*>();
-    formatConversionOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
+    //formatConversionOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
     //formatConversionOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
     //formatConversionOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
     //formatConversionOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
@@ -79,7 +79,7 @@ int main(){
     vector<int> formatConversionOperations = vector<int>();
     formatConversionOperations.push_back(SWS_POINT);
 
-    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, allImgs, formatConversionOutImgs, formatConversionOperations, nTimes);
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, allImgs, formatConversionOutImgs, formatConversionOperations, nTimes);
 
     // TEST SCALING -------------------------------------------------
 
