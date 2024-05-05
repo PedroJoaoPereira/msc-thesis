@@ -28,9 +28,8 @@ int main(){
     // -----------------------------------------------
     // DEBUG VARIABLES -------------------------------
     int nTimes = 1;
-    int operation = SWS_BICUBIC;
-    ImageInfo outImg("imgs/output.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
-    //ImageInfo outImg("imgs/output.yuv", 1920, 1080, AV_PIX_FMT_YUV444P);
+    int operation = SWS_BILINEAR;
+    ImageInfo outImg("imgs/output.yuv", 1280, 720, AV_PIX_FMT_YUV422P);
     // -----------------------------------------------
     // SCALING OPERATIONS ----------------------------
     // Initialize ffmpeg
@@ -38,8 +37,8 @@ int main(){
 
     // Apply the operations
     while(nTimes > 0){
-        //int executionTime = ffmpeg_scale(img04, outImg, operation);
-        int executionTime = sequential_scale(img01, outImg, operation);
+        int executionTime = ffmpeg_scale(img01, outImg, operation);
+        //int executionTime = sequential_scale(img01, outImg, operation);
         if(executionTime < 0){
             cerr << "Could not execute the scaling method!" << endl;
             system("pause");
