@@ -1,634 +1,1190 @@
 #include "OpenMP_Resample.h"
 
 // Convert the pixel format of the image
-template <class PrecisionType>
-int omp_formatConversion(int srcWidth, int srcHeight,
-    int srcPixelFormat, uint8_t* srcSlice[],
-    int dstPixelFormat, uint8_t* dstSlice[]){
+void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* srcSlice[], int dstPixelFormat, uint8_t* dstSlice[]){
+    #pragma region UYVY422
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
 
-    // If same formats no need to resample
-    if(srcPixelFormat == dstPixelFormat){
-        // Copy data between buffers
-        if(srcPixelFormat == AV_PIX_FMT_V210){
-            memcpy(dstSlice[0], srcSlice[0], ((srcWidth + 47) / 48) * 128 * srcHeight);
-        } else if(srcPixelFormat == AV_PIX_FMT_UYVY422){
-            memcpy(dstSlice[0], srcSlice[0], srcWidth * 2 * srcHeight);
-        } else{
-            // Chroma size discovery
-            float widthPerc = 1.f;
-            float heightPerc = 1.f;
-            if(srcPixelFormat == AV_PIX_FMT_YUV422P ||
-                srcPixelFormat == AV_PIX_FMT_YUV420P ||
-                srcPixelFormat == AV_PIX_FMT_YUV422PNORM)
-                widthPerc = 0.5f;
-            if(srcPixelFormat == AV_PIX_FMT_YUV420P)
-                heightPerc = 0.5f;
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideUYVY422 * hStrideUYVY422);
 
-            memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
-            memcpy(dstSlice[1], srcSlice[1], srcWidth * srcHeight * widthPerc * heightPerc);
-            memcpy(dstSlice[2], srcSlice[2], srcWidth * srcHeight * widthPerc * heightPerc);
-        }
-
-        // Success
-        return 0;
+        return;
     }
 
-    // REORGANIZE COMPONENTS -------------------------
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 2;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Loop through each pixel
+        // Iterate blocks of 1x4 channel points
         #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + index * 4;
-            auto dstBuffer = dstSlice[0] + index * 2;
-            auto dstBufferChromaU = dstSlice[1] + index;
-            auto dstBufferChromaV = dstSlice[2] + index;
+        for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV422P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV422P / 2;
 
-            uint8_t u0 = *srcBuffer++; // U0
-            uint8_t y0 = *srcBuffer++; // Y0
-            uint8_t v0 = *srcBuffer++; // V0
-            uint8_t y1 = *srcBuffer++; // Y1
-
-            *dstBuffer++ = y0;
-            *dstBuffer++ = y1;
-
-            *dstBufferChromaU++ = u0;
-            *dstBufferChromaV++ = v0;
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                *dstU++ = *srcB++; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstV++ = *srcB++; // V0
+                *dstB++ = *srcB++; // Y1
+            }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
-        // Access once
-        int stride = srcWidth * 2;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv4 = stride / 4;
-
-        // Loop through each pixel
+        // Iterate blocks of 2x4 channel points
         #pragma omp parallel for schedule(static)
-        for(int lin = 0; lin < heightDiv2; lin++){
-            // Calculate once
-            int linMul2 = lin * 2;
-            int linStrideDiv4 = lin * strideDiv4;
+        for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422 * 2;
+            auto srcBb = srcB + hStrideUYVY422;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV420P * 2;
+            auto dstBb = dstB + hStrideYUV420P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
 
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + linMul2 * stride;
-            auto srcBufferBelow = srcBuffer + stride;
-            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
-            auto dstBufferBelow = dstBuffer + srcWidth;
-            auto dstBufferChromaU = dstSlice[1] + linStrideDiv4;
-            auto dstBufferChromaV = dstSlice[2] + linStrideDiv4;
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                // Get above line
+                uint8_t u0 = *srcB++; // U0
+                uint8_t y0 = *srcB++; // Y0
+                uint8_t v0 = *srcB++; // V0
+                uint8_t y1 = *srcB++; // Y1
 
-            for(int col = 0; col < strideDiv4; col++){
-                uint8_t u0 = *srcBuffer++; // U0
-                uint8_t y0 = *srcBuffer++; // Y0
-                uint8_t v0 = *srcBuffer++; // V0
-                uint8_t y1 = *srcBuffer++; // Y1
+                // Get below line
+                *srcBb++; // U0
+                uint8_t y0b = *srcBb++; // Y0
+                *srcBb++; // V0
+                uint8_t y1b = *srcBb++; // Y1
 
-                srcBufferBelow++;
-                uint8_t y2 = *srcBufferBelow++; // Y2
-                srcBufferBelow++;
-                uint8_t y3 = *srcBufferBelow++; // Y3
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
 
-                *dstBuffer++ = y0;
-                *dstBuffer++ = y1;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
 
-                *dstBufferBelow++ = y2;
-                *dstBufferBelow++ = y3;
-
-                *dstBufferChromaU++ = u0;
-                *dstBufferChromaV++ = v0;
+                // Assigne chroma values
+                *dstU++ = u0;
+                *dstV++ = v0;
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
-        // Access once
-        int stride = srcWidth * 2;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv2 = stride / 2;
-        int strideDiv4 = stride / 4;
-
-        // Loop through each pixel
+        // Iterate blocks of 2x4 channel points
         #pragma omp parallel for schedule(static)
-        for(int lin = 0; lin < heightDiv2; lin++){
-            // Calculate once
-            int linMul2 = lin * 2;
+        for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422 * 2;
+            auto srcBb = srcB + hStrideUYVY422;
+            auto dstB = dstSlice[0] + vIndex * hStrideNV12 * 2;
+            auto dstBb = dstB + hStrideNV12;
+            auto dstC = dstSlice[1] + vIndex * hStrideNV12;
 
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + linMul2 * stride;
-            auto srcBufferBelow = srcBuffer + stride;
-            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
-            auto dstBufferBelow = dstBuffer + srcWidth;
-            auto dstBufferChroma = dstSlice[1] + lin * strideDiv2;
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                // Get above line
+                uint8_t u0 = *srcB++; // U0
+                uint8_t y0 = *srcB++; // Y0
+                uint8_t v0 = *srcB++; // V0
+                uint8_t y1 = *srcB++; // Y1
 
-            for(int col = 0; col < strideDiv4; col++){
-                uint8_t u0 = *srcBuffer++; // U0
-                uint8_t y0 = *srcBuffer++; // Y0
-                uint8_t v0 = *srcBuffer++; // V0
-                uint8_t y1 = *srcBuffer++; // Y1
+                // Get below line
+                *srcBb++; // U0
+                uint8_t y0b = *srcBb++; // Y0
+                *srcBb++; // V0
+                uint8_t y1b = *srcBb++; // Y1
 
-                srcBufferBelow++;
-                uint8_t y2 = *srcBufferBelow++; // Y2
-                srcBufferBelow++;
-                uint8_t y3 = *srcBufferBelow++; // Y3
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
 
-                *dstBuffer++ = y0;
-                *dstBuffer++ = y1;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
 
-                *dstBufferBelow++ = y2;
-                *dstBufferBelow++ = y3;
-
-                *dstBufferChroma++ = u0;
-                *dstBufferChroma++ = v0;
+                // Assigne chroma values
+                *dstC++ = u0;
+                *dstC++ = v0;
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 6;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
 
-        // Assign once
-        enum{ SHIFT_8TO10B = 2U, SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, };
-
-        // Loop through each pixel
+        // Iterate blocks of 1x12 channel points
         #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + index * 12;
-            auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]) + index * 4;
+        for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideUYVY422;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * hStrideV210;
 
-            auto u0 = *srcBuffer++ << SHIFT_8TO10B; // U0
-            auto y0 = *srcBuffer++ << SHIFT_8TO10B; // Y0
-            auto v0 = *srcBuffer++ << SHIFT_8TO10B; // V0
-            auto y1 = *srcBuffer++ << SHIFT_8TO10B; // Y1
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 12; hIndex++){
+                // Get components from source
+                auto u0 = *srcB++ << 2U; // U0
+                auto y0 = *srcB++ << 2U; // Y0
+                auto v0 = *srcB++ << 2U; // V0
+                auto y1 = *srcB++ << 2U; // Y1
 
-            auto u1 = *srcBuffer++ << SHIFT_8TO10B; // U1
-            auto y2 = *srcBuffer++ << SHIFT_8TO10B; // Y2
-            auto v1 = *srcBuffer++ << SHIFT_8TO10B; // V1
-            auto y3 = *srcBuffer++ << SHIFT_8TO10B; // Y3
+                auto u1 = *srcB++ << 2U; // U1
+                auto y2 = *srcB++ << 2U; // Y2
+                auto v1 = *srcB++ << 2U; // V1
+                auto y3 = *srcB++ << 2U; // Y3
 
-            auto u2 = *srcBuffer++ << SHIFT_8TO10B; // U2
-            auto y4 = *srcBuffer++ << SHIFT_8TO10B; // Y4
-            auto v2 = *srcBuffer++ << SHIFT_8TO10B; // V2
-            auto y5 = *srcBuffer++ << SHIFT_8TO10B; // Y5
+                auto u2 = *srcB++ << 2U; // U2
+                auto y4 = *srcB++ << 2U; // Y4
+                auto v2 = *srcB++ << 2U; // V2
+                auto y5 = *srcB++ << 2U; // Y5
 
-            *dstBuffer++ = (v0 << SHIFT_LEFT) | (y0 << SHIFT_MIDDLE) | u0;
-            *dstBuffer++ = (y2 << SHIFT_LEFT) | (u1 << SHIFT_MIDDLE) | y1;
-            *dstBuffer++ = (u2 << SHIFT_LEFT) | (y3 << SHIFT_MIDDLE) | v1;
-            *dstBuffer++ = (y5 << SHIFT_LEFT) | (v2 << SHIFT_MIDDLE) | y4;
+                // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
         }
 
-        // Success
-        return 0;
+        return;
+    }
+    #pragma endregion
+
+    #pragma region YUV422P
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+
+        // Iterate blocks of 1x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
+            auto dstB = dstSlice[0] + vIndex * hStrideUYVY422;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV422P / 2;
+
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 2; hIndex++){
+                *dstB++ = *srcU++; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = *srcV++; // V0
+                *dstB++ = *srcB++; // Y1
+            }
+        }
+
+        return;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 2;
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Loop through each pixel
-        #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + index * 2;
-            auto srcBufferChromaU = srcSlice[1] + index;
-            auto srcBufferChromaV = srcSlice[2] + index;
-            auto dstBuffer = dstSlice[0] + index * 4;
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
+        memcpy(dstSlice[1], srcSlice[1], vStrideYUV422P * hStrideYUV422P / 2);
+        memcpy(dstSlice[2], srcSlice[2], vStrideYUV422P * hStrideYUV422P / 2);
 
-            *dstBuffer++ = *srcBufferChromaU++; // U0
-            *dstBuffer++ = *srcBuffer++; // Y0
-            *dstBuffer++ = *srcBufferChromaV++; // V0
-            *dstBuffer++ = *srcBuffer++; // Y1
-        }
-
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P){
-        // Access once
-        int stride = srcWidth;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv2 = stride / 2;
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        // Loop through each pixel
-        #pragma omp parallel for schedule(static)
-        for(int lin = 0; lin < heightDiv2; lin++){
-            // Calculate once
-            int linMul2 = lin * 2;
-            int linMul2MulStrideDiv2 = linMul2 * strideDiv2;
-            int linMulStrideDiv2 = lin * strideDiv2;
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
 
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + linMul2 * stride;
-            auto srcBufferBelow = srcBuffer + stride;
-            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
-            auto dstBufferBelow = dstBuffer + srcWidth;
-            auto srcBufferChromaU = srcSlice[1] + linMul2MulStrideDiv2;
-            auto srcBufferChromaV = srcSlice[2] + linMul2MulStrideDiv2;
-            auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
-            auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
-            auto dstBufferChromaU = dstSlice[1] + linMulStrideDiv2;
-            auto dstBufferChromaV = dstSlice[2] + linMulStrideDiv2;
+            // Iterate blocks of 2x1 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcUb = srcU + hStrideYUV422PChroma;
+                auto srcVb = srcV + hStrideYUV422PChroma;
+                auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+                auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
 
-            for(int col = 0; col < strideDiv2; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBufferChromaU++); // U0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBufferChromaV++); // V0
+                for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                    // Get above chroma values
+                    uint8_t u = *srcU++; // U0
+                    uint8_t v = *srcV++; // V0
 
-                PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
-                PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
+                    // Get below chroma values
+                    uint8_t ub = *srcUb++; // U1
+                    uint8_t vb = *srcVb++; // V1
 
-                *dstBuffer++ = *srcBuffer++;
-                *dstBuffer++ = *srcBuffer++;
-                *dstBufferBelow++ = *srcBufferBelow++;
-                *dstBufferBelow++ = *srcBufferBelow++;
-
-                *dstBufferChromaU++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
-                *dstBufferChromaV++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
+                    // Assign values
+                    *dstU++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
+                    *dstV++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
+                }
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12){
-        // Access once
-        int stride = srcWidth;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv2 = stride / 2;
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        // Loop through each pixel
-        #pragma omp parallel for schedule(static)
-        for(int lin = 0; lin < heightDiv2; lin++){
-            // Calculate once
-            int linMul2 = lin * 2;
-            int linMul2MulStrideDiv2 = linMul2 * strideDiv2;
-            int linMulStrideDiv2 = lin * strideDiv2;
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
 
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + linMul2 * stride;
-            auto srcBufferBelow = srcBuffer + stride;
-            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
-            auto dstBufferBelow = dstBuffer + srcWidth;
-            auto srcBufferChromaU = srcSlice[1] + linMul2MulStrideDiv2;
-            auto srcBufferChromaV = srcSlice[2] + linMul2MulStrideDiv2;
-            auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
-            auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
-            auto dstBufferChroma = dstSlice[1] + lin * stride;
+            // Iterate blocks of 2x1 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto srcUb = srcU + hStrideYUV422PChroma;
+                auto srcVb = srcV + hStrideYUV422PChroma;
+                auto dstC = dstSlice[1] + vIndex * hStrideNV12;
 
-            for(int col = 0; col < strideDiv2; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBufferChromaU++); // U0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBufferChromaV++); // V0
+                for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                    // Get above chroma values
+                    uint8_t u = *srcU++; // U0
+                    uint8_t v = *srcV++; // V0
 
-                PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
-                PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
+                    // Get below chroma values
+                    uint8_t ub = *srcUb++; // U1
+                    uint8_t vb = *srcVb++; // V1
 
-                *dstBuffer++ = *srcBuffer++;
-                *dstBuffer++ = *srcBuffer++;
-                *dstBufferBelow++ = *srcBufferBelow++;
-                *dstBufferBelow++ = *srcBufferBelow++;
-
-                *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
-                *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
+                    // Assign values
+                    *dstC++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
+                    *dstC++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
+                }
             }
         }
 
-        // Success
-        return 0;
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 6;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
 
-        // Assign once
-        enum{ SHIFT_8TO10B = 2U, SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, };
-
-        // Loop through each pixel
+        // Iterate blocks of 1x6 channel points
         #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Calculate once
-            int indexMul3 = index * 3;
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * hStrideV210;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV422P / 2;
 
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + index * 6;
-            auto srcBufferChromaU = srcSlice[1] + indexMul3;
-            auto srcBufferChromaV = srcSlice[2] + indexMul3;
-            auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]) + index * 4;
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 6; hIndex++){
+                // Get components from source
+                auto u0 = *srcU++ << 2U; // U0
+                auto y0 = *srcB++ << 2U; // Y0
+                auto v0 = *srcV++ << 2U; // V0
+                auto y1 = *srcB++ << 2U; // Y1
 
-            auto u0 = *srcBufferChromaU++ << SHIFT_8TO10B; // U0
-            auto y0 = *srcBuffer++ << SHIFT_8TO10B; // Y0
-            auto v0 = *srcBufferChromaV++ << SHIFT_8TO10B; // V0
-            auto y1 = *srcBuffer++ << SHIFT_8TO10B; // Y1
+                auto u1 = *srcU++ << 2U; // U1
+                auto y2 = *srcB++ << 2U; // Y2
+                auto v1 = *srcV++ << 2U; // V1
+                auto y3 = *srcB++ << 2U; // Y3
 
-            auto u1 = *srcBufferChromaU++ << SHIFT_8TO10B; // U1
-            auto y2 = *srcBuffer++ << SHIFT_8TO10B; // Y2
-            auto v1 = *srcBufferChromaV++ << SHIFT_8TO10B; // V1
-            auto y3 = *srcBuffer++ << SHIFT_8TO10B; // Y3
+                auto u2 = *srcU++ << 2U; // U2
+                auto y4 = *srcB++ << 2U; // Y4
+                auto v2 = *srcV++ << 2U; // V2
+                auto y5 = *srcB++ << 2U; // Y5
 
-            auto u2 = *srcBufferChromaU++ << SHIFT_8TO10B; // U2
-            auto y4 = *srcBuffer++ << SHIFT_8TO10B; // Y4
-            auto v2 = *srcBufferChromaV++ << SHIFT_8TO10B; // V2
-            auto y5 = *srcBuffer++ << SHIFT_8TO10B; // Y5
-
-            *dstBuffer++ = (v0 << SHIFT_LEFT) | (y0 << SHIFT_MIDDLE) | u0;
-            *dstBuffer++ = (y2 << SHIFT_LEFT) | (u1 << SHIFT_MIDDLE) | y1;
-            *dstBuffer++ = (u2 << SHIFT_LEFT) | (y3 << SHIFT_MIDDLE) | v1;
-            *dstBuffer++ = (y5 << SHIFT_LEFT) | (v2 << SHIFT_MIDDLE) | y4;
+                                         // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
         }
 
-        // Success
-        return 0;
+        return;
+    }
+    #pragma endregion
+
+    #pragma region YUV420P
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto srcBb = srcB + hStrideYUV420P;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideUYVY422;
+            auto dstBb = dstB + hStrideUYVY422;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcU++; // U
+                uint8_t v = *srcV++; // V
+
+                                     // Assign above line values
+                *dstB++ = u; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = v; // V0
+                *dstB++ = *srcB++; // Y1
+
+                                   // Assign below line values
+                *dstBb++ = u; // U0
+                *dstBb++ = *srcBb++; // Y0
+                *dstBb++ = v; // V0
+                *dstBb++ = *srcBb++; // Y1
+            }
+        }
+
+        return;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422){
-        // Number of elements
-        long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Assign once
-        enum{ SHIFT_10TO8B = 2U, SHIFT_RIGHT = 20U, SHIFT_MIDDLE = 10U, XFF = 0xFF, };
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        // Loop through each pixel
-        #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Buffer pointers
-            auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]) + index * 4;
-            auto dstBuffer = dstSlice[0] + index * 12;
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
 
-            auto u0 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // U0
-            auto y0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y0
-            auto v0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // V0
-            *srcBuffer++;
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+                auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+                auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstUb = dstU + hStrideYUV422PChroma;
+                auto dstVb = dstV + hStrideYUV422PChroma;
 
-            auto y1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y1
-            auto u1 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // U1
-            auto y2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y2
-            *srcBuffer++;
+                for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                    // Get chroma values
+                    uint8_t u = *srcU++; // U
+                    uint8_t v = *srcV++; // V
 
-            auto v1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // V1
-            auto y3 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y3
-            auto u2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // U2
-            *srcBuffer++;
+                    // Assign values dupicated
+                    *dstU++ = u;
+                    *dstV++ = v;
 
-            auto y4 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y4
-            auto v2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // V2
-            auto y5 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y5
-            *srcBuffer++;
-
-            *(dstBuffer++) = u0;
-            *(dstBuffer++) = y0;
-            *(dstBuffer++) = v0;
-            *(dstBuffer++) = y1;
-
-            *(dstBuffer++) = u1;
-            *(dstBuffer++) = y2;
-            *(dstBuffer++) = v1;
-            *(dstBuffer++) = y3;
-
-            *(dstBuffer++) = u2;
-            *(dstBuffer++) = y4;
-            *(dstBuffer++) = v2;
-            *(dstBuffer++) = y5;
+                    *dstUb++ = u;
+                    *dstVb++ = v;
+                }
+            }
         }
 
-        // Success
-        return 0;
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+        memcpy(dstSlice[1], srcSlice[1], vStrideYUV420P * hStrideYUV420P / 4);
+        memcpy(dstSlice[2], srcSlice[2], vStrideYUV420P * hStrideYUV420P / 4);
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+                auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+                auto dstC = dstSlice[1] + vIndex * hStrideNV12;
+
+                for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                    *dstC++ = *srcU++; // U
+                    *dstC++ = *srcV++; // V
+                }
+            }
+        }
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_V210){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto srcBb = srcB + hStrideYUV420P;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * 2 * hStrideV210;
+            auto dstBb = dstB + hStrideV210;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 6; hIndex++){
+                // Get lumas from above line
+                auto y0 = *srcB++ << 2U;
+                auto y1 = *srcB++ << 2U;
+                auto y2 = *srcB++ << 2U;
+                auto y3 = *srcB++ << 2U;
+                auto y4 = *srcB++ << 2U;
+                auto y5 = *srcB++ << 2U;
+
+                // Get lumas from below line
+                auto y0b = *srcBb++ << 2U;
+                auto y1b = *srcBb++ << 2U;
+                auto y2b = *srcBb++ << 2U;
+                auto y3b = *srcBb++ << 2U;
+                auto y4b = *srcBb++ << 2U;
+                auto y5b = *srcBb++ << 2U;
+
+                // Get chroma U
+                auto u0 = *srcU++ << 2U;
+                auto u1 = *srcU++ << 2U;
+                auto u2 = *srcU++ << 2U;
+
+                // Get chroma V
+                auto v0 = *srcV++ << 2U;
+                auto v1 = *srcV++ << 2U;
+                auto v2 = *srcV++ << 2U;
+
+                // Assign above line
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+
+                // Assign below line
+                *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
+                *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
+                *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
+                *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+            }
+        }
+
+        return;
+    }
+    #pragma endregion
+
+    #pragma region NV12
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideNV12;
+            auto srcBb = srcB + hStrideNV12;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideUYVY422;
+            auto dstBb = dstB + hStrideUYVY422;
+            auto srcC = srcSlice[1] + vIndex * hStrideNV12;
+
+            for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcC++; // U
+                uint8_t v = *srcC++; // V
+
+                // Assign above line values
+                *dstB++ = u; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = v; // V0
+                *dstB++ = *srcB++; // Y1
+
+                // Assign below line values
+                *dstBb++ = u; // U0
+                *dstBb++ = *srcBb++; // Y0
+                *dstBb++ = v; // V0
+                *dstBb++ = *srcBb++; // Y1
+            }
+        }
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
+
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+                // Discover buffer pointers
+                auto srcC = srcSlice[1] + vIndex * hStrideNV12;
+                auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+                auto dstUb = dstU + hStrideYUV422PChroma;
+                auto dstVb = dstV + hStrideYUV422PChroma;
+
+                for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                    // Get chroma values
+                    uint8_t u = *srcC++; // U
+                    uint8_t v = *srcC++; // V
+
+                    // Assign values dupicated
+                    *dstU++ = u;
+                    *dstV++ = v;
+
+                    *dstUb++ = u;
+                    *dstVb++ = v;
+                }
+            }
+        }
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+
+        #pragma omp parallel
+        {
+            // Luma plane is the same
+            #pragma omp single nowait
+            memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+
+            // Iterate blocks of 2x2 channel points
+            #pragma omp for schedule(static)
+            for(int vIndex = 0; vIndex < vStrideNV12; vIndex++){
+                // Discover buffer pointers
+                auto srcC = srcSlice[1] + vIndex * hStrideNV12 / 2;
+                auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 4;
+                auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 4;
+
+                for(int hIndex = 0; hIndex < hStrideNV12 / 4; hIndex++){
+                    *dstU++ = *srcC++; // U
+                    *dstV++ = *srcC++; // V
+                }
+            }
+        }
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+        memcpy(dstSlice[1], srcSlice[1], vStrideNV12 * hStrideNV12 / 2);
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_V210){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+
+        // Iterate blocks of 2x2 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * 2 * hStrideNV12;
+            auto srcBb = srcB + hStrideNV12;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * 2 * hStrideV210;
+            auto dstBb = dstB + hStrideV210;
+            auto srcC = srcSlice[1] + vIndex * hStrideNV12;
+
+            for(int hIndex = 0; hIndex < hStrideNV12 / 6; hIndex++){
+                // Get lumas from above line
+                auto y0 = *srcB++ << 2U;
+                auto y1 = *srcB++ << 2U;
+                auto y2 = *srcB++ << 2U;
+                auto y3 = *srcB++ << 2U;
+                auto y4 = *srcB++ << 2U;
+                auto y5 = *srcB++ << 2U;
+
+                // Get lumas from below line
+                auto y0b = *srcBb++ << 2U;
+                auto y1b = *srcBb++ << 2U;
+                auto y2b = *srcBb++ << 2U;
+                auto y3b = *srcBb++ << 2U;
+                auto y4b = *srcBb++ << 2U;
+                auto y5b = *srcBb++ << 2U;
+
+                // Get chroma U and V
+                auto u0 = *srcC++ << 2U;
+                auto v0 = *srcC++ << 2U;
+                auto u1 = *srcC++ << 2U;
+                auto v1 = *srcC++ << 2U;
+                auto u2 = *srcC++ << 2U;
+                auto v2 = *srcC++ << 2U;
+
+                // Assign above line
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+
+                // Assign below line
+                *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
+                *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
+                *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
+                *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+            }
+        }
+
+        return;
+    }
+    #pragma endregion
+
+    #pragma region V210
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+
+        // Iterate blocks of 1x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * hStrideUYVY422;
+
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
+
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
+
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
+
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
+
+                *(dstB++) = u0;
+                *(dstB++) = y0;
+                *(dstB++) = v0;
+                *(dstB++) = y1;
+
+                *(dstB++) = u1;
+                *(dstB++) = y2;
+                *(dstB++) = v1;
+                *(dstB++) = y3;
+
+                *(dstB++) = u2;
+                *(dstB++) = y4;
+                *(dstB++) = v2;
+                *(dstB++) = y5;
+            }
+        }
+
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422P){
-        // Number of elements
-        long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Assign once
-        enum{ SHIFT_10TO8B = 2U, SHIFT_RIGHT = 20U, SHIFT_MIDDLE = 10U, XFF = 0xFF, };
-
-        // Loop through each pixel
+        // Iterate blocks of 1x4 channel points
         #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Calculate once
-            int indexMul3 = index * 3;
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV422P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV422P / 2;
 
-            // Buffer pointers
-            auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]) + index * 4;
-            auto dstBuffer = dstSlice[0] + index * 6;
-            auto dstBufferChromaU = dstSlice[1] + indexMul3;
-            auto dstBufferChromaV = dstSlice[2] + indexMul3;
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-            auto u0 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // U0
-            auto y0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y0
-            auto v0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // V0
-            *srcBuffer++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-            auto y1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y1
-            auto u1 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // U1
-            auto y2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y2
-            *srcBuffer++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-            auto v1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // V1
-            auto y3 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y3
-            auto u2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // U2
-            *srcBuffer++;
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-            auto y4 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y4
-            auto v2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // V2
-            auto y5 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y5
-            *srcBuffer++;
+                *(dstU++) = u0;
+                *(dstB++) = y0;
+                *(dstV++) = v0;
+                *(dstB++) = y1;
 
-            *(dstBufferChromaU++) = u0;
-            *(dstBuffer++) = y0;
-            *(dstBufferChromaV++) = v0;
-            *(dstBuffer++) = y1;
+                *(dstU++) = u1;
+                *(dstB++) = y2;
+                *(dstV++) = v1;
+                *(dstB++) = y3;
 
-            *(dstBufferChromaU++) = u1;
-            *(dstBuffer++) = y2;
-            *(dstBufferChromaV++) = v1;
-            *(dstBuffer++) = y3;
-
-            *(dstBufferChromaU++) = u2;
-            *(dstBuffer++) = y4;
-            *(dstBufferChromaV++) = v2;
-            *(dstBuffer++) = y5;
+                *(dstU++) = u2;
+                *(dstB++) = y4;
+                *(dstV++) = v2;
+                *(dstB++) = y5;
+            }
         }
 
-        // Success
-        return 0;
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+
+        // Iterate blocks of 2x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * 2 * hStrideV210;
+            auto srcBb = srcB + hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto dstBb = dstB + hStrideYUV420P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
+
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                // Get above line
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
+
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
+
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
+
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
+
+                // Get below line
+                auto u0b = (*srcBb >> 2U) & 0xFF; // U0
+                auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
+                *srcBb++;
+
+                auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
+                auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
+                auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
+                *srcBb++;
+
+                auto v1b = (*srcBb >> 2U) & 0xFF; // V1
+                auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
+                *srcBb++;
+
+                auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
+                auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
+                auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
+                *srcBb++;
+
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
+                *dstB++ = y2;
+                *dstB++ = y3;
+                *dstB++ = y4;
+                *dstB++ = y5;
+
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+                *dstBb++ = y2b;
+                *dstBb++ = y3b;
+                *dstBb++ = y4b;
+                *dstBb++ = y5b;
+
+                // Assign chroma values
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
+
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+            }
+        }
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+
+        // Iterate blocks of 2x4 channel points
+        #pragma omp parallel for schedule(static)
+        for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * 2 * hStrideV210;
+            auto srcBb = srcB + hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * 2 * hStrideNV12;
+            auto dstBb = dstB + hStrideNV12;
+            auto dstC = dstSlice[1] + vIndex * hStrideNV12;
+
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                // Get above line
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
+
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
+
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
+
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
+
+                // Get below line
+                auto u0b = (*srcBb >> 2U) & 0xFF; // U0
+                auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
+                *srcBb++;
+
+                auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
+                auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
+                auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
+                *srcBb++;
+
+                auto v1b = (*srcBb >> 2U) & 0xFF; // V1
+                auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
+                *srcBb++;
+
+                auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
+                auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
+                auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
+                *srcBb++;
+
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
+                *dstB++ = y2;
+                *dstB++ = y3;
+                *dstB++ = y4;
+                *dstB++ = y5;
+
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+                *dstBb++ = y2b;
+                *dstBb++ = y3b;
+                *dstBb++ = y4b;
+                *dstBb++ = y5b;
+
+                // Assign chroma values
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+            }
+        }
+
+        return;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_V210){
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+
+        // Copy data
+        memcpy(dstSlice[0], srcSlice[0], vStrideV210 * hStrideV210 * sizeof(uint32_t));
+
+        return;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422PNORM){
-        // Number of elements
-        long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Calculate once
-        PrecisionType valueConstLuma = static_cast<PrecisionType>(219.) / static_cast<PrecisionType>(1023.);
-        PrecisionType valueConstChroma = static_cast<PrecisionType>(224.) / static_cast<PrecisionType>(1023.);
-        PrecisionType value16 = static_cast<PrecisionType>(16.);
+        // Create const for normalization
+        double constLuma = 219. / 1023.;
+        double constChroma = 224. / 1023.;
+        double const16 = 16.;
 
-        // Assign once
-        enum{ SHIFT_RIGHT = 20U, SHIFT_MIDDLE = 10U, X3FF = 0x3FF, };
-
-        // Loop through each pixel
+        // Iterate blocks of 1x4 channel points
         #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Calculate once
-            int indexMul3 = index * 3;
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            // Discover buffer pointers
+            auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
+            auto dstB = dstSlice[0] + vIndex * hStrideYUV422P;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV422P / 2;
 
-            // Buffer pointers
-            auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]) + index * 4;
-            auto dstBuffer = dstSlice[0] + index * 6;
-            auto dstBufferChromaU = dstSlice[1] + indexMul3;
-            auto dstBufferChromaV = dstSlice[2] + indexMul3;
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = *srcB & 0x3FF; // U0
+                auto y0 = (*srcB >> 10U) & 0x3FF; // Y0
+                auto v0 = (*srcB >> 20U) & 0x3FF; // V0
+                *srcB++;
 
-            auto u0 = *srcBuffer & X3FF; // U0
-            auto y0 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // Y0
-            auto v0 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // V0
-            *srcBuffer++;
+                auto y1 = *srcB & 0x3FF; // Y1
+                auto u1 = (*srcB >> 10U) & 0x3FF; // U1
+                auto y2 = (*srcB >> 20U) & 0x3FF; // Y2
+                *srcB++;
 
-            auto y1 = *srcBuffer & X3FF; // Y1
-            auto u1 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // U1
-            auto y2 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // Y2
-            *srcBuffer++;
+                auto v1 = *srcB & 0x3FF; // V1
+                auto y3 = (*srcB >> 10U) & 0x3FF; // Y3
+                auto u2 = (*srcB >> 20U) & 0x3FF; // U2
+                *srcB++;
 
-            auto v1 = *srcBuffer & X3FF; // V1
-            auto y3 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // Y3
-            auto u2 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // U2
-            *srcBuffer++;
+                auto y4 = *srcB & 0x3FF; // Y4
+                auto v2 = (*srcB >> 10U) & 0x3FF; // V2
+                auto y5 = (*srcB >> 20U) & 0x3FF; // Y5
+                *srcB++;
 
-            auto y4 = *srcBuffer & X3FF; // Y4
-            auto v2 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // V2
-            auto y5 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // Y5
-            *srcBuffer++;
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u0) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y0) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v0) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y1) * constLuma + const16));
 
-            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u0) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y0) * valueConstLuma + value16);
-            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v0) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y1) * valueConstLuma + value16);
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u1) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y2) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v1) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y3) * constLuma + const16));
 
-            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u1) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y2) * valueConstLuma + value16);
-            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v1) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y3) * valueConstLuma + value16);
-
-            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u2) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y4) * valueConstLuma + value16);
-            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v2) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y5) * valueConstLuma + value16);
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u2) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y4) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v2) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y5) * constLuma + const16));
+            }
         }
 
-        // Success
-        return 0;
+        return;
     }
+    #pragma endregion
 
+    #pragma region YUV422PNORM
     if(srcPixelFormat == AV_PIX_FMT_YUV422PNORM && dstPixelFormat == AV_PIX_FMT_V210){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 6;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
 
-        // Calculate once
-        PrecisionType value16 = static_cast<PrecisionType>(16.);
-        PrecisionType valueConstLuma = static_cast<PrecisionType>(1023.) / static_cast<PrecisionType>(219.);
-        PrecisionType valueConstChroma = static_cast<PrecisionType>(1023.) / static_cast<PrecisionType>(224.);
+        // Create const for normalization
+        double const16 = 16.;
+        double constLuma = 1023. / 219.;
+        double constChroma = 1023. / 224.;
 
-        // Assign once
-        enum{ SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, X3FF = 0x3FF, };
-
-        // Loop through each pixel
+        // Iterate blocks of 1x6 channel points
         #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index++){
-            // Calculate once
-            int indexMul3 = index * 3;
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            // Discover buffer pointers
+            auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
+            auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]) + vIndex * hStrideV210;
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV422P / 2;
 
-            // Buffer pointers
-            auto srcBuffer = srcSlice[0] + index * 6;
-            auto srcBufferChromaU = srcSlice[1] + indexMul3;
-            auto srcBufferChromaV = srcSlice[2] + indexMul3;
-            auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]) + index * 4;
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 6; hIndex++){
+                // Get components from source
+                auto u0n = *srcU++; // U0
+                auto y0n = *srcB++; // Y0
+                auto v0n = *srcV++; // V0
+                auto y1n = *srcB++; // Y1
 
-            auto u0bpp8 = *srcBufferChromaU++; // U0
-            auto y0bpp8 = *srcBuffer++; // Y0
-            auto v0bpp8 = *srcBufferChromaV++; // V0
-            auto y1bpp8 = *srcBuffer++; // Y1
+                auto u1n = *srcU++; // U1
+                auto y2n = *srcB++; // Y2
+                auto v1n = *srcV++; // V1
+                auto y3n = *srcB++; // Y3
 
-            auto u1bpp8 = *srcBufferChromaU++; // U1
-            auto y2bpp8 = *srcBuffer++; // Y2
-            auto v1bpp8 = *srcBufferChromaV++; // V1
-            auto y3bpp8 = *srcBuffer++; // Y3
+                auto u2n = *srcU++; // U2
+                auto y4n = *srcB++; // Y4
+                auto v2n = *srcV++; // V2
+                auto y5n = *srcB++; // Y5
 
-            auto u2bpp8 = *srcBufferChromaU++; // U2
-            auto y4bpp8 = *srcBuffer++; // Y4
-            auto v2bpp8 = *srcBufferChromaV++; // V2
-            auto y5bpp8 = *srcBuffer++; // Y5
+                // Denormalize values
+                auto v0 = uint16_t(roundFast((static_cast<double>(v0n) - const16) * constChroma)) & 0x3FF;
+                auto y0 = uint16_t(roundFast((static_cast<double>(y0n) - const16) * constLuma)) & 0x3FF;
+                auto u0 = uint16_t(roundFast((static_cast<double>(u0n) - const16) * constChroma)) & 0x3FF;
+                auto y2 = uint16_t(roundFast((static_cast<double>(y2n) - const16) * constLuma)) & 0x3FF;
 
-            auto v0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v0bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y0bpp8) - value16) * valueConstLuma) & X3FF;
-            auto u0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u0bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y2bpp8) - value16) * valueConstLuma) & X3FF;
+                auto u1 = uint16_t(roundFast((static_cast<double>(u1n) - const16) * constChroma)) & 0x3FF;
+                auto y1 = uint16_t(roundFast((static_cast<double>(y1n) - const16) * constLuma)) & 0x3FF;
+                auto u2 = uint16_t(roundFast((static_cast<double>(u2n) - const16) * constChroma)) & 0x3FF;
+                auto y3 = uint16_t(roundFast((static_cast<double>(y3n) - const16) * constLuma)) & 0x3FF;
 
-            auto u1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u1bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y1bpp8) - value16) * valueConstLuma) & X3FF;
-            auto u2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u2bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y3 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y3bpp8) - value16) * valueConstLuma) & X3FF;
+                auto v1 = uint16_t(roundFast((static_cast<double>(v1n) - const16) * constChroma)) & 0x3FF;
+                auto y5 = uint16_t(roundFast((static_cast<double>(y5n) - const16) * constLuma)) & 0x3FF;
+                auto v2 = uint16_t(roundFast((static_cast<double>(v2n) - const16) * constChroma)) & 0x3FF;
+                auto y4 = uint16_t(roundFast((static_cast<double>(y4n) - const16) * constLuma)) & 0x3FF;
 
-            auto v1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v1bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y5 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y5bpp8) - value16) * valueConstLuma) & X3FF;
-            auto v2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v2bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y4 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y4bpp8) - value16) * valueConstLuma) & X3FF;
-
-            *dstBuffer++ = (v0 << SHIFT_LEFT) | (y0 << SHIFT_MIDDLE) | u0;
-            *dstBuffer++ = (y2 << SHIFT_LEFT) | (u1 << SHIFT_MIDDLE) | y1;
-            *dstBuffer++ = (u2 << SHIFT_LEFT) | (y3 << SHIFT_MIDDLE) | v1;
-            *dstBuffer++ = (y5 << SHIFT_LEFT) | (v2 << SHIFT_MIDDLE) | y4;
+                // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
         }
 
-        // Success
-        return 0;
+        return;
     }
-
-    // No conversion was supported
-    return -1;
+    #pragma endregion
 }
 
 // Precalculate coefficients
-template <class PrecisionType>
-int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation,
-    int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType* &preCalculatedCoefs){
-
+int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, double(*coefFunc)(double), double* &preCalculatedCoefs){
     // Calculate size ratio
-    PrecisionType sizeRatio = static_cast<PrecisionType>(dstSize) / static_cast<PrecisionType>(srcSize);
+    double sizeRatio = static_cast<double>(dstSize) / static_cast<double>(srcSize);
 
     // Calculate once
-    PrecisionType pixelSupportDiv2 = pixelSupport / static_cast<PrecisionType>(2.);
-    bool isDownScale = sizeRatio < static_cast<PrecisionType>(1.);
-    PrecisionType regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
-    PrecisionType filterStep = isDownScale && operation != SWS_POINT ? static_cast<PrecisionType>(1.) / sizeRatio : static_cast<PrecisionType>(1.);
+    double pixelSupportDiv2 = pixelSupport / 2.;
+    bool isDownScale = sizeRatio < 1.;
+    double regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
+    double filterStep = isDownScale && operation != SWS_POINT ? 1. / sizeRatio : 1.;
     int numCoefficients = isDownScale ? ceil(pixelSupport / sizeRatio) : pixelSupport;
     int numCoefficientsDiv2 = numCoefficients / 2;
 
     // Calculate number of lines of coefficients
-    int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min<int>(srcSize, dstSize);
+    int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min(srcSize, dstSize);
 
     // Initialize array
-    preCalculatedCoefs = static_cast<PrecisionType*>(malloc(preCalcCoefSize * numCoefficients * sizeof(PrecisionType)));
+    preCalculatedCoefs = static_cast<double*>(malloc(preCalcCoefSize * numCoefficients * sizeof(double)));
 
     // For each necessary line of coefficients
     for(int col = 0; col < preCalcCoefSize; col++){
@@ -636,23 +1192,23 @@ int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation,
         int indexOffset = col * numCoefficients;
 
         // Original line index coordinate
-        PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(.5)) / sizeRatio;
+        double colOriginal = (static_cast<double>(col) + .5) / sizeRatio;
 
         // Discover source limit pixels
-        PrecisionType nearPixel = colOriginal - filterStep;
-        PrecisionType leftPixel = colOriginal - regionRadius;
+        double nearPixel = colOriginal - filterStep;
+        double leftPixel = colOriginal - regionRadius;
 
         // Discover offset to pixel of filter start
-        PrecisionType offset = round(leftPixel) + static_cast<PrecisionType>(.5) - leftPixel;
+        double offset = round(leftPixel) + .5 - leftPixel;
         // Calculate maximum distance to normalize distances
-        PrecisionType maxDistance = colOriginal - nearPixel;
+        double maxDistance = colOriginal - nearPixel;
         // Calculate where filtering will start
-        PrecisionType startPosition = leftPixel + offset;
+        double startPosition = leftPixel + offset;
 
         // Calculate coefficients
-        PrecisionType coefAcc = static_cast<PrecisionType>(0.);
+        double coefAcc = 0.;
         for(int index = 0; index < numCoefficients; index++){
-            PrecisionType coefHolder = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
+            double coefHolder = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
             coefAcc += coefHolder;
             preCalculatedCoefs[indexOffset + index] = coefHolder;
         }
@@ -661,12 +1217,12 @@ int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation,
         if(operation == SWS_POINT){
             if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == preCalculatedCoefs[indexOffset + numCoefficientsDiv2]){
                 if(isDownScale){
-                    if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == static_cast<PrecisionType>(0.) && numCoefficients % 2 != 0)
-                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] = static_cast<PrecisionType>(1.);
+                    if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == 0. && numCoefficients % 2 != 0)
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] = 1.;
                     else
-                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.;
                 } else
-                    preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
+                    preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.;
             }
         }
 
@@ -681,23 +1237,21 @@ int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation,
 }
 
 // Change the image dimension
-template <class PrecisionType>
 void omp_resize(int srcWidth, int srcHeight, uint8_t* srcData,
     int dstWidth, int dstHeight, uint8_t* dstData,
-    int operation, int pixelSupport,
-    int vCoefsSize, PrecisionType* &vCoefs, int hCoefsSize, PrecisionType* &hCoefs,
-    int colorChannel){
+    int operation, int pixelSupport, int colorChannel,
+    int vCoefsSize, double* &vCoefs, int hCoefsSize, double* &hCoefs){
 
     // Get scale ratios
-    PrecisionType scaleHeightRatio = static_cast<PrecisionType>(dstHeight) / static_cast<PrecisionType>(srcHeight);
-    PrecisionType scaleWidthRatio = static_cast<PrecisionType>(dstWidth) / static_cast<PrecisionType>(srcWidth);
+    double scaleHeightRatio = static_cast<double>(dstHeight) / static_cast<double>(srcHeight);
+    double scaleWidthRatio = static_cast<double>(dstWidth) / static_cast<double>(srcWidth);
 
     // Calculate once
-    PrecisionType pixelSupportDiv2 = pixelSupport / static_cast<PrecisionType>(2.);
-    bool isDownScaleV = scaleHeightRatio < static_cast<PrecisionType>(1.);
-    bool isDownScaleH = scaleWidthRatio < static_cast<PrecisionType>(1.);
-    PrecisionType regionVRadius = isDownScaleV ? pixelSupportDiv2 / scaleHeightRatio : pixelSupportDiv2;
-    PrecisionType regionHRadius = isDownScaleH ? pixelSupportDiv2 / scaleWidthRatio : pixelSupportDiv2;
+    double pixelSupportDiv2 = pixelSupport / 2.;
+    bool isDownScaleV = scaleHeightRatio < 1.;
+    bool isDownScaleH = scaleWidthRatio < 1.;
+    double regionVRadius = isDownScaleV ? pixelSupportDiv2 / scaleHeightRatio : pixelSupportDiv2;
+    double regionHRadius = isDownScaleH ? pixelSupportDiv2 / scaleWidthRatio : pixelSupportDiv2;
     int numVCoefs = isDownScaleV ? ceil(pixelSupport / scaleHeightRatio) : pixelSupport;
     int numHCoefs = isDownScaleH ? ceil(pixelSupport / scaleWidthRatio) : pixelSupport;
 
@@ -710,15 +1264,15 @@ void omp_resize(int srcWidth, int srcHeight, uint8_t* srcData,
         int indexLinOffset = (lin % vCoefsSize) * numVCoefs;
 
         // Original line index coordinate
-        PrecisionType linOriginal = (static_cast<PrecisionType>(lin) + static_cast<PrecisionType>(.5)) / scaleHeightRatio;
+        double linOriginal = (static_cast<double>(lin) + .5) / scaleHeightRatio;
 
         // Discover source limit pixels
-        PrecisionType upperPixel = linOriginal - regionVRadius;
+        double upperPixel = linOriginal - regionVRadius;
         // Discover offset to pixel of filter start
-        PrecisionType offsetV = round(upperPixel) + static_cast<PrecisionType>(.5) - upperPixel;
+        double offsetV = round(upperPixel) + .5 - upperPixel;
 
         // Calculate once
-        PrecisionType startLinPosition = upperPixel + offsetV;
+        double startLinPosition = upperPixel + offsetV;
 
         // Iterate through each column of the scaled image
         for(int col = 0; col < dstWidth; col++){
@@ -726,55 +1280,51 @@ void omp_resize(int srcWidth, int srcHeight, uint8_t* srcData,
             int indexColOffset = (col % hCoefsSize) * numHCoefs;
 
             // Original line index coordinate
-            PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(.5)) / scaleWidthRatio;
+            double colOriginal = (static_cast<double>(col) + .5) / scaleWidthRatio;
 
             // Discover source limit pixels
-            PrecisionType leftPixel = colOriginal - regionHRadius;
+            double leftPixel = colOriginal - regionHRadius;
             // Discover offset to pixel of filter start
-            PrecisionType offsetH = round(leftPixel) + static_cast<PrecisionType>(.5) - leftPixel;
+            double offsetH = round(leftPixel) + .5 - leftPixel;
 
             // Calculate once
-            PrecisionType startColPosition = leftPixel + offsetH;
+            double startColPosition = leftPixel + offsetH;
 
             // Temporary variables used in the interpolation
-            PrecisionType result = static_cast<PrecisionType>(0.);
+            double result = 0.;
             // Calculate resulting color from coefficients
             for(int indexV = 0; indexV < numVCoefs; indexV++){
                 // Access once the memory
-                PrecisionType vCoef = vCoefs[indexLinOffset + indexV];
+                double vCoef = vCoefs[indexLinOffset + indexV];
 
                 for(int indexH = 0; indexH < numHCoefs; indexH++){
                     // Access once the memory
-                    PrecisionType hCoef = hCoefs[indexColOffset + indexH];
+                    double hCoef = hCoefs[indexColOffset + indexH];
 
                     // Get pixel from source data
                     uint8_t colorHolder = getPixel(startLinPosition + indexV, startColPosition + indexH, srcWidth, srcHeight, srcData);
 
                     // Calculate pixel color weight
-                    PrecisionType weight = vCoef * hCoef;
+                    double weight = vCoef * hCoef;
 
                     // Weights neighboring pixel and add it to the result
-                    result += static_cast<PrecisionType>(colorHolder) * weight;
+                    result += static_cast<double>(colorHolder) * weight;
                 }
             }
 
             // Clamp value to avoid undershooting and overshooting
             if(colorChannel == 0)
-                clamp<PrecisionType>(result, static_cast<PrecisionType>(16.), static_cast<PrecisionType>(235.));
+                clamp(result, 16., 235.);
             else
-                clamp<PrecisionType>(result, static_cast<PrecisionType>(16.), static_cast<PrecisionType>(240.));
+                clamp(result, 16., 240.);
             // Assign calculated color to destiantion data
-            dstData[targetLine + col] = roundTo<uint8_t, PrecisionType>(result);
+            dstData[targetLine + col] = uint8_t(roundFast(result));
         }
     }
 }
 
 // Prepares the resample operation
-template <class PrecisionType>
-int omp_resample_aux(AVFrame* src, AVFrame* dst, int operation){
-    // Return value of this method
-    int returnValue = 0;
-
+void omp_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     // Access once
     int srcWidth = src->width, srcHeight = src->height;
     int srcFormat = src->format;
@@ -783,113 +1333,80 @@ int omp_resample_aux(AVFrame* src, AVFrame* dst, int operation){
 
     // Check if is only a format conversion
     bool isOnlyFormatConversion = srcWidth == dstWidth && srcHeight == dstHeight;
-
-    // Initialize needed variables if it is a scaling operation
-    int scalingSupportedFormat = getTempScaleFormat(srcFormat, dstFormat);
-
-    // Temporary buffers used in intermediate operations
-    uint8_t** formatConversionBuffer, **resizeBuffer;
-
-    // Last format conversion buffers
-    uint8_t** lastFormatConversionBuffer = src->data;
-    int lastFormatConversionPixelFormat = srcFormat;
-
-    // Rescaling operation branch
-    if(!isOnlyFormatConversion){
-        // Allocate temporary buffers
-        allocBuffers(formatConversionBuffer, srcWidth, srcHeight, scalingSupportedFormat);
-        allocBuffers(resizeBuffer, dstWidth, dstHeight, scalingSupportedFormat);
-
-        // Resamples image to a supported format
-        if(omp_formatConversion<PrecisionType>(srcWidth, srcHeight,
-            srcFormat, src->data,
-            scalingSupportedFormat, formatConversionBuffer) < 0){
-            returnValue = -1;
-            goto END;
-        }
-
-        // Needed resources for coefficients calculations
-        PrecisionType(*coefFunc)(PrecisionType) = getCoefMethod<PrecisionType>(operation);
-        int pixelSupport = getPixelSupport(operation);
-
-        // Variables for precalculated coefficients
-        PrecisionType* vCoefs;
-        int vCoefsSize;
-        PrecisionType* hCoefs;
-        int hCoefsSize;
-        #pragma omp parallel sections
-        {
-            #pragma omp section
-            {
-                vCoefsSize = omp_preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
-            }
-
-            #pragma omp section
-            {
-                hCoefsSize = omp_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
-            }
-        }
-
-        // Chroma size discovery
-        float widthPerc = 1.f;
-        float heightPerc = 1.f;
-        if(scalingSupportedFormat == AV_PIX_FMT_YUV422P ||
-            scalingSupportedFormat == AV_PIX_FMT_YUV420P ||
-            scalingSupportedFormat == AV_PIX_FMT_YUV422PNORM)
-            widthPerc = 0.5f;
-        if(scalingSupportedFormat == AV_PIX_FMT_YUV420P)
-            heightPerc = 0.5f;
-
-        // Apply the resizing operation to luma channel
-        omp_resize<PrecisionType>(srcWidth, srcHeight, formatConversionBuffer[0],
-            dstWidth, dstHeight, resizeBuffer[0], operation,
-            pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, 0);
-
-        // Apply the resizing operation to chroma channels
-        int srcWidthChroma = static_cast<int>(srcWidth * widthPerc);
-        int srcHeightChroma = static_cast<int>(srcHeight * heightPerc);
-        int dstWidthChroma = static_cast<int>(dstWidth * widthPerc);
-        int dstHeightChroma = static_cast<int>(dstHeight * heightPerc);
-        for(int colorChannel = 1; colorChannel < 3; colorChannel++){
-            omp_resize<PrecisionType>(srcWidthChroma, srcHeightChroma, formatConversionBuffer[colorChannel],
-                dstWidthChroma, dstHeightChroma, resizeBuffer[colorChannel], operation,
-                pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs, colorChannel);
-        }
-
-
-        // Assign correct values to apply last resample
-        lastFormatConversionBuffer = resizeBuffer;
-        lastFormatConversionPixelFormat = scalingSupportedFormat;
-
-        // Free used resources
-        free(vCoefs);
-        free(hCoefs);
+    // Changes image pixel format only
+    if(isOnlyFormatConversion){
+        // Format conversion operation
+        omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
+        // End resample operation
+        return;
     }
 
-    // Resamples image to a target format
-    if(omp_formatConversion<PrecisionType>(dstWidth, dstHeight,
-        lastFormatConversionPixelFormat, lastFormatConversionBuffer,
-        dstFormat, dst->data) < 0){
-        returnValue = -1;
-        goto END;
+    // Get standard supported pixel format in scaling
+    int scaleFormat = getScaleFormat(srcFormat, dstFormat);
+
+    // Needed resources for coefficients calculations
+    double(*coefFunc)(double) = getCoefMethod(operation);
+    int pixelSupport = getPixelSupport(operation);
+    // Precalculate coefficients
+    double* vCoefs;
+    int vCoefsSize = omp_preCalculateCoefficients(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
+    double* hCoefs;
+    int hCoefsSize = omp_preCalculateCoefficients(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
+
+    // Temporary buffer
+    uint8_t** formatConversionBuffer;
+    // Allocate temporary buffer
+    allocBuffers(formatConversionBuffer, srcWidth, srcHeight, scaleFormat);
+
+    // Resamples image to a supported format
+    omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, formatConversionBuffer);
+
+    // Temporary buffer
+    uint8_t **resizeBuffer;
+    // Allocate temporary buffer
+    allocBuffers(resizeBuffer, dstWidth, dstHeight, scaleFormat);
+
+    // Chroma size discovery
+    double widthPerc = 1.;
+    double heightPerc = 1.;
+    if(scaleFormat == AV_PIX_FMT_YUV422P || scaleFormat == AV_PIX_FMT_YUV420P || scaleFormat == AV_PIX_FMT_YUV422PNORM)
+        widthPerc = .5;
+    if(scaleFormat == AV_PIX_FMT_YUV420P)
+        heightPerc = .5;
+
+    // Apply the resizing operation to luma channel
+    omp_resize(srcWidth, srcHeight, formatConversionBuffer[0],
+        dstWidth, dstHeight, resizeBuffer[0], operation, pixelSupport, 0,
+        vCoefsSize, vCoefs, hCoefsSize, hCoefs);
+
+    // Apply the resizing operation to chroma channels
+    int srcWidthChroma = static_cast<int>(srcWidth * widthPerc);
+    int srcHeightChroma = static_cast<int>(srcHeight * heightPerc);
+    int dstWidthChroma = static_cast<int>(dstWidth * widthPerc);
+    int dstHeightChroma = static_cast<int>(dstHeight * heightPerc);
+    for(int colorChannel = 1; colorChannel < 3; colorChannel++){
+        omp_resize(srcWidthChroma, srcHeightChroma, formatConversionBuffer[colorChannel],
+            dstWidthChroma, dstHeightChroma, resizeBuffer[colorChannel], operation, pixelSupport, colorChannel,
+            vCoefsSize, vCoefs, hCoefsSize, hCoefs);
     }
 
-    END:
     // Free used resources
-    if(!isOnlyFormatConversion){
-        free2dBuffer<uint8_t>(formatConversionBuffer, 3);
-        free2dBuffer<uint8_t>(resizeBuffer, 3);
-    }
+    free2dBuffer(formatConversionBuffer, 3);
+    free(vCoefs);
+    free(hCoefs);
 
-    // Return negative if insuccess
-    return returnValue;
+    // Resamples image to target format
+    omp_formatConversion(dstWidth, dstHeight, scaleFormat, resizeBuffer, dstFormat, dst->data);
+
+    // Free used resources
+    free2dBuffer(resizeBuffer, 3);
 }
 
-// Wrapper for the openmp scale operation method
+// Wrapper for the openmp resample operation method
 int omp_resample(AVFrame* src, AVFrame* dst, int operation){
-    // Variables used
-    int duration = -1;
-    high_resolution_clock::time_point initTime, stopTime;
+    // Access once
+    AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
+    AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
 
     // Verify valid frames
     if(src == nullptr || dst == nullptr){
@@ -897,52 +1414,53 @@ int omp_resample(AVFrame* src, AVFrame* dst, int operation){
         return -1;
     }
 
-    AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
-    AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
+    // Verify valid input data
+    if(!src->data || !src->linesize || !dst->data || !dst->linesize){
+        cerr << "[OpenMP] Frame data buffers can not be null!" << endl;
+        return -1;
+    }
 
     // Verify valid input dimensions
     if(src->width < 0 || src->height < 0 || dst->width < 0 || dst->height < 0){
         cerr << "[OpenMP] Frame dimensions can not be a negative number!" << endl;
         return -1;
     }
+
+    // Verify if data is aligned
+    if(((src->width % 4 != 0 && srcFormat == AV_PIX_FMT_UYVY422) || (dst->width % 4 != 0 && dstFormat == AV_PIX_FMT_UYVY422)) &&
+        ((src->width % 12 != 0 && srcFormat == AV_PIX_FMT_V210) || (dst->width % 12 != 0 && dstFormat == AV_PIX_FMT_V210))){
+        cerr << "[OpenMP] Can not handle unaligned data!" << endl;
+        return -1;
+    }
+
     // Verify valid resize
     if((src->width < dst->width && src->height > dst->height) ||
         (src->width > dst->width && src->height < dst->height)){
         cerr << "[OpenMP] Can not upscale in an orientation and downscale another!" << endl;
         return -1;
     }
-    // Verify valid input data
-    if(!src->data || !src->linesize || !dst->data || !dst->linesize){
-        cerr << "[OpenMP] Frame data buffers can not be null!" << endl;
+
+    // Verify if supported conversion
+    if(!hasSupportedConversion(srcFormat, dstFormat)){
+        cerr << "[OpenMP] Pixel format conversion is not supported!" << endl;
         return -1;
     }
-    // Verify if supported pixel formats
-    if(!isSupportedFormat(srcFormat) || !isSupportedFormat(dstFormat)){
-        cerr << "[OpenMP] Frame pixel format is not supported!" << endl;
-        return -1;
-    }
-    // Verify if can convert a 10 bit format
-    if((src->width % 12 != 0 && srcFormat == AV_PIX_FMT_V210) || (dst->width % 12 != 0 && dstFormat == AV_PIX_FMT_V210)){
-        cerr << "[OpenMP] Can not handle 10 bit format because data is not aligned!" << endl;
-        return -1;
-    }
+
     // Verify if supported scaling operation
     if(!isSupportedOperation(operation)){
         cerr << "[OpenMP] Scaling operation is not supported" << endl;
         return -1;
     }
 
+    // Variables used
+    int duration = -1;
+    high_resolution_clock::time_point initTime, stopTime;
+
     // Start counting operation execution time
     initTime = high_resolution_clock::now();
 
     // Apply the scaling operation
-    if(omp_resample_aux<double>(src, dst, operation) < 0){
-        // Display error
-        cerr << "[OpenMP] Operation could not be done (resample - conversion not supported)" << endl;
-
-        // Insuccess
-        return -1;
-    }
+    omp_resample_aux(src, dst, operation);
 
     // Stop counting operation execution time
     stopTime = high_resolution_clock::now();

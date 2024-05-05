@@ -24,23 +24,7 @@ bool isSupportedOperation(int operation);
 
 // int format   - pixel format of the data
 // Return if format is supported
-bool isSupportedFormat(int format);
-
-// int inFormat	    - pixel format of the source data
-// int outFormat    - pixel format of the target data
-// Return the temporary scale pixel format
-int getTempScaleFormat(int inFormat, int outFormat);
-
-// int width        - width of the image
-// int height       - height of the image
-// int pixelFormat  - pixel format of the image
-// int* &bufferSize - buffer to hold image channel sizes
-// Return the temporary scale pixel format
-void getPixelFormatChannelSizes(int width, int height, int pixelFormat, int* &bufferSize);
-
-// int operation    - value to be clamped
-// Return the value of the pixel support depending of the operation
-int getPixelSupport(int operation);
+bool isSupportedFormatDEPRECATED(int format);
 
 // uint8_t** &buffer    - buffer to be allocated
 // int width            - width of the image
@@ -48,6 +32,11 @@ int getPixelSupport(int operation);
 // int pixelFormat      - pixel format of the image to be allocated
 // Allocate image channels data buffers depending of the pixel format
 void allocBuffers(uint8_t** &buffer, int width, int height, int pixelFormat);
+
+// uint8_t** &buffer    - buffer to be freed
+// int bufferSize       - size of the buffer to be freed
+// Free the 2d buffer resources
+void free2dBuffer(uint8_t** &buffer, int bufferSize);
 
 // int lin              - line coordinate of pixel to retrieve
 // int col              - column coordinate of pixel to retrieve
@@ -57,50 +46,79 @@ void allocBuffers(uint8_t** &buffer, int width, int height, int pixelFormat);
 // Get a valid pixel from the image
 uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data);
 
+// int inFormat	    - pixel format of the source data
+// int outFormat    - pixel format of the target data
+// Return the temporary scale pixel format
+int getScaleFormat(int inFormat, int outFormat);
+
+// int operation    - value to be clamped
+// Return the value of the pixel support depending of the operation
+int getPixelSupport(int operation);
+
+// int operation    - value to be clamped
+// Return coefficient function calculator
+double(*getCoefMethod(int operation))(double);
+
+// double val   - distance value to calculate coefficient from
+// Calculate nearest neighbor interpolation coefficient from a distance
+double NearestNeighborCoefficient(double val);
+
+// double val   - distance value to calculate coefficient from
+// Calculate bilinear interpolation coefficient from a distance
+double BilinearCoefficient(double val);
+
+// double val    - distance value to calculate coefficient from
+// Calculate Mitchell interpolation coefficient from a distance
+double MitchellCoefficient(double val);
+
+// double val    - distance value to calculate coefficient from
+// Calculate Lanczos interpolation coefficient from a distance
+double LanczosCoefficient(double val);
+
 // TEMPLATES
 
 // DataType** &buffer    - buffer to be freed
 // int bufferSize       - size of the buffer to be freed
 // Free the 2d buffer resources
 template <class DataType>
-void free2dBuffer(DataType** &buffer, int bufferSize);
+void free2dBufferAuxDEPRECATED(DataType** &buffer, int bufferSize);
 
 // PrecisionType* val   - value to be clamped
 // PrecisionType min    - minimum limit of clamping
 // PrecisionType max    - maximum limit of clamping
 // PrecisionType a value to a defined interval
 template <class PrecisionType>
-void clamp(PrecisionType &val, PrecisionType min, PrecisionType max);
+void clampDEPRECATED(PrecisionType &val, PrecisionType min, PrecisionType max);
 
 // PrecisionType value  - value to be converted
 // Convert a floating point value to fixed point
 template <class DataType, class PrecisionType>
-DataType roundTo(PrecisionType value);
+DataType roundToDEPRECATED(PrecisionType value);
 
 // int operation    - value to be clamped
 // Return coefficient function calculator
 template <class PrecisionType>
-PrecisionType(*getCoefMethod(int operation))(PrecisionType);
+PrecisionType(*getCoefMethodAuxDEPRECATED(int operation))(PrecisionType);
 
 // PrecisionType val    - distance value to calculate coefficient from
 // Calculate nearest neighbor interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType NearestNeighborCoefficient(PrecisionType val);
+PrecisionType NearestNeighborCoefficientDEPRECATED(PrecisionType val);
 
 // PrecisionType val    - distance value to calculate coefficient from
 // Calculate bilinear interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType BilinearCoefficient(PrecisionType val);
+PrecisionType BilinearCoefficientDEPRECATED(PrecisionType val);
 
 // PrecisionType val    - distance value to calculate coefficient from
 // Calculate Mitchell interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType MitchellCoefficient(PrecisionType val);
+PrecisionType MitchellCoefficientDEPRECATED(PrecisionType val);
 
 // PrecisionType val    - distance value to calculate coefficient from
 // Calculate Lanczos interpolation coefficient from a distance
 template <class PrecisionType>
-PrecisionType LanczosCoefficient(PrecisionType val);
+PrecisionType LanczosCoefficientDEPRECATED(PrecisionType val);
 
 // Include template methods implementations
 #include "ImageUtils.hpp"
