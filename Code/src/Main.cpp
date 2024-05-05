@@ -22,30 +22,36 @@ int main(){
     // HD720  - 1280 x 720
 
     // INFO OF IMAGES USED IN TESTS ------------------
-    ImageInfo img00("imgs/color-yuv422p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
-    img00.loadImage();
+	ImageInfo img_rgb24_1920x1080("imgs/bbb-rgb24-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_RGB24);
+	img_rgb24_1920x1080.loadImage();
 
-    ImageInfo img01("imgs/uyvy422-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_UYVY422);
-    img01.loadImage();
+	ImageInfo img_yuv444p_1920x1080("imgs/bbb-yuv444p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV444P);
+	img_yuv444p_1920x1080.loadImage();
 
-    ImageInfo img02("imgs/yuv420p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
-    img02.loadImage();
+	ImageInfo img_yuv422p_1920x1080("imgs/bbb-yuv422p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
+	img_yuv422p_1920x1080.loadImage();
 
-    ImageInfo img03("imgs/yuv422p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
-    img03.loadImage();
+	ImageInfo img_yuv420p_1920x1080("imgs/bbb-yuv420p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV420P);
+	img_yuv420p_1920x1080.loadImage();
+
+	ImageInfo img_uyvy422_1920x1080("imgs/bbb-uyvy422-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_UYVY422);
+	img_uyvy422_1920x1080.loadImage();
+
+	ImageInfo img_nv12_1920x1080("imgs/bbb-nv12-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_NV12);
+	img_nv12_1920x1080.loadImage();
 
     // DEBUG VARIABLES -------------------------------
-    ImageInfo inImg = img01;
-    int dstWidth = 7680;
-    int dstHeight = 4320;
-    AVPixelFormat dstFormat = AV_PIX_FMT_YUV422P;
-    int operation = SWS_BICUBIC;
+    ImageInfo inImg = img_rgb24_1920x1080;
+    int dstWidth = 1920;
+    int dstHeight = 1080;
+	AVPixelFormat dstFormat = AV_PIX_FMT_YUV444P;
+	int operation = SWS_BICUBIC;
 
-    int maxTestTimes = 100;
+    int maxTestTimes = 5;
     bool testAverage = true;
-    bool testFfmpeg = false;
-    bool testSequential = false;
-    bool testOpenmp = true;
+    bool testFfmpeg = true;
+    bool testSequential = true;
+    bool testOpenmp = false;
 
     int avgAcc;
 
@@ -85,7 +91,7 @@ int main(){
 
         // Display averaged results
         if(testAverage)
-            cout << "[FFMPEG] Average execution time was " << avgAcc / static_cast<double>(maxTestTimes) << " ms!" << endl;
+            cout << "[FFMPEG] Average execution time was " << avgAcc / static_cast<float>(maxTestTimes) << " ms!" << endl;
     }
 
     // Operate with sequential process
@@ -116,7 +122,7 @@ int main(){
 
         // Display averaged results
         if(testAverage)
-            cout << "[SEQUENTIAL] Average execution time was " << avgAcc / static_cast<double>(maxTestTimes) << " ms!" << endl;
+            cout << "[SEQUENTIAL] Average execution time was " << avgAcc / static_cast<float>(maxTestTimes) << " ms!" << endl;
     }
 
     // Operate with openmp process
@@ -147,7 +153,7 @@ int main(){
 
         // Display averaged results
         if(testAverage)
-            cout << "[OPENMP] Average execution time was " << avgAcc / static_cast<double>(maxTestTimes) << " ms!" << endl;
+            cout << "[OPENMP] Average execution time was " << avgAcc / static_cast<float>(maxTestTimes) << " ms!" << endl;
     }
 
     // Write results

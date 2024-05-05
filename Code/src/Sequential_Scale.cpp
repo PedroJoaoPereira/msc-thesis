@@ -70,41 +70,112 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
         return 0;
     }
 
-    // -----------------------------------------------
     // REORGANIZE COMPONENTS -------------------------
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
-        // Calculate once
+        // Number of elements
         long numElements = srcStride[0] * srcHeight;
 
         // Loop through each pixel
         for(int index = 0; index < numElements; index += 4){
-            dstSlice[0][index / 2] = srcSlice[0][index + 1];        // Ya
-            dstSlice[0][index / 2 + 1] = srcSlice[0][index + 3];    // Yb
+			// Calculate once
+			int indexDiv2 = index / 2;
+			int indexDiv4 = index / 4;
 
-            dstSlice[1][index / 4] = srcSlice[0][index];            // U
-            dstSlice[2][index / 4] = srcSlice[0][index + 2];        // V
+            dstSlice[0][indexDiv2] = srcSlice[0][index + 1];        // Ya
+            dstSlice[0][indexDiv2 + 1] = srcSlice[0][index + 3];    // Yb
+
+            dstSlice[1][indexDiv4] = srcSlice[0][index];            // U
+            dstSlice[2][indexDiv4] = srcSlice[0][index + 2];        // V
         }
 
         // Success
         return 0;
     }
 
-    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
-        // Calculate once
-        long numElements = srcStride[0] * srcHeight;
+	if (srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422) {
+		// Number of elements
+		long numElements = srcStride[0] * srcHeight;
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index += 2){
-            dstSlice[0][index * 2 + 1] = srcSlice[0][index];        // Ya
-            dstSlice[0][index * 2 + 3] = srcSlice[0][index + 1];    // Yb
+		// Loop through each pixel
+		for (int index = 0; index < numElements; index += 2) {
+			// Calculate once
+			int indexMul2 = index * 2;
+			int indexDiv2 = index / 2;
 
-            dstSlice[0][index * 2] = srcSlice[1][index / 2];        // U
-            dstSlice[0][index * 2 + 2] = srcSlice[2][index / 2];    // V
-        }
+			dstSlice[0][indexMul2 + 1] = srcSlice[0][index];        // Ya
+			dstSlice[0][indexMul2 + 3] = srcSlice[0][index + 1];    // Yb
 
-        // Success
-        return 0;
-    }
+			dstSlice[0][indexMul2] = srcSlice[1][indexDiv2];        // U
+			dstSlice[0][indexMul2 + 2] = srcSlice[2][indexDiv2];    // V
+		}
+
+		// Success
+		return 0;
+	}
+
+	if (srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV420P) {
+		// Number of elements
+		long numElements = srcStride[0] * srcHeight;
+		long numElementsDiv2 = numElements / 2;
+
+		// Luma Plane is the same
+		memcpy(dstSlice[0], srcSlice[0], numElements);
+
+		// Loop through each pixel chroma 
+		for (int index = 0; index < numElementsDiv2; index += 2) {
+			// Calculate once
+			int indexDiv2 = index / 2;
+
+			dstSlice[1][indexDiv2] = srcSlice[1][index];        // U
+			dstSlice[2][indexDiv2] = srcSlice[1][index + 1];    // V
+		}
+
+		// Success
+		return 0;
+	}
+
+	if (srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_NV12) {
+		// Number of elements
+		long numElements = srcStride[0] * srcHeight;
+		long numElementsDiv4 = numElements / 4;
+
+		// Luma Plane is the same
+		memcpy(dstSlice[0], srcSlice[0], numElements);
+
+		// Loop through each pixel chroma 
+		for (int index = 0; index < numElementsDiv4; index++) {
+			// Calculate once
+			int indexMul2 = index * 2;
+
+			dstSlice[1][indexMul2] = srcSlice[1][index];        // U
+			dstSlice[1][indexMul2 + 1] = srcSlice[2][index];    // V
+		}
+
+		// Success
+		return 0;
+	}
+
+	if (srcPixelFormat == AV_PIX_FMT_RGB24 && dstPixelFormat == AV_PIX_FMT_YUV444P) {
+		// Number of elements
+		long numElements = srcStride[0] * srcHeight;
+
+		// Loop through each pixel
+		for (int index = 0; index < numElements; index++) {
+			// Calculate once
+			int indexDiv3 = index / 3;
+
+			float r = static_cast<float>(srcSlice[0][index]);	// R
+			float g = static_cast<float>(srcSlice[0][++index]);	// G
+			float b = static_cast<float>(srcSlice[0][++index]);	// B
+
+			dstSlice[0][indexDiv3] = float2uint8_t(0.299f * r + 0.587f * g + 0.114f * b);			// Y
+			dstSlice[1][indexDiv3] = float2uint8_t(-0.169f * r - 0.331f * g + 0.499f * b + 128.f);	// U
+			dstSlice[2][indexDiv3] = float2uint8_t(0.499f * r - 0.418f * g - 0.0813f * b + 128.f);	// V
+		}
+
+		// Success
+		return 0;
+	}
 
     cerr << "Conversion not supported" << endl;
     return -1;
