@@ -287,35 +287,45 @@ __global__ void cubicScaleV(const int srcWidth, const int srcHeight, const int d
         cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin + 2), tex2D(texV, pixCol, pixLin + 2), tex2D(texV, pixCol + 1, pixLin + 2), tex2D(texV, pixCol + 2, pixLin + 2)))));
 }
 
+
+#define USE_TIME 1
+
 // Prepares the resample operation
 void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
     int srcWidth, int srcHeight, int dstWidth, int dstHeight,
     int srcWidthChroma, int srcHeightChroma, int dstWidthChroma, int dstHeightChroma,
-    int srcFormat, int dstFormat, int scaleFormat,     
+    int srcFormat, int dstFormat, int scaleFormat,
     uint8_t* &pinnedHost, cudaChannelFormatDesc &channelDesc, cudaArray* &ySrc, cudaArray* &uSrc, cudaArray* &vSrc,
     uint8_t* &scaledDevice, int* &scaledDeviceSizes, cudaStream_t &streamY, cudaStream_t &streamU, cudaStream_t &streamV,
-    double* &times){
+    double* &times)
+{
 
     // Get scale ratios
     float scaleHeightRatio = static_cast<float>(dstHeight) / static_cast<float>(srcHeight);
     float scaleWidthRatio = static_cast<float>(dstWidth) / static_cast<float>(srcWidth);
 
     // Buffers for first format conversion
-    uint8_t** toScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    //uint8_t** toScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    uint8_t* toScalePtrs[3];// = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
     toScalePtrs[0] = pinnedHost;
     toScalePtrs[1] = toScalePtrs[0] + srcHeight * srcWidth;
     toScalePtrs[2] = toScalePtrs[1] + srcHeightChroma * srcWidthChroma;
-    uint8_t** fromScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    //uint8_t** fromScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    uint8_t* fromScalePtrs[3];// = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
     fromScalePtrs[0] = toScalePtrs[2] + srcHeightChroma * srcWidthChroma;
     fromScalePtrs[1] = fromScalePtrs[0] + dstHeight * dstWidth;
     fromScalePtrs[2] = fromScalePtrs[1] + dstHeightChroma * dstWidthChroma;
 
-    // Time variables
-    high_resolution_clock::time_point initTime, stopTime;
-
     // Format conversion operation
+    high_resolution_clock::time_point initTime, stopTime;
     initTime = high_resolution_clock::now();
-    omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, toScalePtrs);
+    if(scaleFormat != dstFormat)
+        omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, toScalePtrs);
+    else{
+        toScalePtrs[0] = src->data[0];
+        toScalePtrs[1] = src->data[1];
+        toScalePtrs[2] = src->data[2];
+    }
     stopTime = high_resolution_clock::now();
     times[0] = duration_cast<microseconds>(stopTime - initTime).count() * 1.;
 
@@ -360,17 +370,14 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
     stopTime = high_resolution_clock::now();
     times[1] = duration_cast<microseconds>(stopTime - initTime).count() * 1.;
 
-    // Free used resources
-    free(toScalePtrs);
-
     // Format conversion operation
     initTime = high_resolution_clock::now();
-    omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
+    if(scaleFormat != dstFormat)
+        omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
+    else
+        dst->data[0] = fromScalePtrs[0];
     stopTime = high_resolution_clock::now();
     times[2] = duration_cast<microseconds>(stopTime - initTime).count() * 1.;
-
-    // Free used resources    
-    free(fromScalePtrs);
 
     // Sucess
     return;
