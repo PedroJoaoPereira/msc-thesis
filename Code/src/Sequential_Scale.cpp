@@ -2,13 +2,13 @@
 
 #include "Common.h"
 
-void getPixel(uint8_t** data, int channel, int width, int height, int lin, int col, uint8_t* pixelVal){
+void getPixel(uint8_t* data, int width, int height, int lin, int col, uint8_t* pixelVal){
     // Clamp coords
     clampPixel(lin, 0, height - 1);
     clampPixel(col, 0, width - 1);
 
     // Assigns correct value to return
-    *pixelVal = data[channel][lin * width + col];
+    *pixelVal = data[lin * width + col];
 }
 
 float bcoef(float x){
@@ -28,8 +28,8 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
                   int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]);
 
 // Sequential scale method
-int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
-                  int dstWidth, int dstHeight, uint8_t* dstSlice[],
+int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
+                  int dstWidth, int dstHeight, uint8_t* dstSlice,
                   int operation);
 
 // Prepares the scaling operation
@@ -78,13 +78,13 @@ int sequential_scale(ImageInfo src, ImageInfo dst, int operation){
     initTime = high_resolution_clock::now();
 
     // Apply the scaling operation
-    if(seq_scale_aux(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
+    /*if(seq_scale_aux(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
                  dst.width, dst.height, dst.pixelFormat, dstFrame->data, dstFrame->linesize,
-                 operation) < 0) return -1;
+                 operation) < 0) return -1;*/
 
     // DEBUG
-    /*seq_resampler(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
-                  dst.width, dst.height, dst.pixelFormat, dstFrame->data, dstFrame->linesize);*/
+    seq_resampler(src.width, src.height, src.pixelFormat, srcFrame->data, srcFrame->linesize,
+                  dst.width, dst.height, dst.pixelFormat, dstFrame->data, dstFrame->linesize);
 
     // Stop counting operation execution time
     stopTime = high_resolution_clock::now();
@@ -122,7 +122,6 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         memcpy(dstSlice[1], srcSlice[1], srcStride[1] * srcHeight);
         memcpy(dstSlice[2], srcSlice[2], srcStride[2] * srcHeight);
         memcpy(dstSlice[3], srcSlice[3], srcStride[3] * srcHeight);
-
         return 0;
     }
 
@@ -144,6 +143,30 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
         // Success
         return 0;
     }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Calculate once
+        long numElements = srcStride[0] * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index += 2){
+            dstSlice[0][index * 2 + 1] = srcSlice[0][index];        // Ya
+            dstSlice[0][index * 2 + 3] = srcSlice[0][index + 1];    // Yb
+
+            dstSlice[0][index * 2] = srcSlice[1][index / 2];        // U
+            dstSlice[0][index * 2 + 2] = srcSlice[2][index / 2];    // V
+        }
+
+        // Success
+        return 0;
+    }
+
+
+
+
+
+
+
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
         // Calculate once
@@ -279,8 +302,8 @@ int seq_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
     return -1;
 }
 
-int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
-              int dstWidth, int dstHeight, uint8_t* dstSlice[],
+int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
+              int dstWidth, int dstHeight, uint8_t* dstSlice,
               int operation){
 
     // Get scale ratios
@@ -334,18 +357,15 @@ int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
 
                 // Temporary variables used in the bilinear interpolation
                 uint8_t colorTopLeft, colorTopRight, colorBottomLeft, colorBottomRight;
-                // Bilinear interpolation operation for each color channel
-                for(int colorChannel = 0; colorChannel < 3; colorChannel++){
-                    // Retrieve pixel from data buffer
-                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMin, colMin, &colorTopLeft);
-                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMin, colMax, &colorTopRight);
-                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMax, colMin, &colorBottomLeft);
-                    getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linMax, colMax, &colorBottomRight);
-                    // Interpolate and store value
-                    dstSlice[colorChannel][lin * dstWidth + col] = float2uint8_t(
-                        (static_cast<float>(colorTopLeft) * colMinDistance + static_cast<float>(colorTopRight) * colMaxDistance) * linMinDistance + 
-                        (static_cast<float>(colorBottomLeft) * colMinDistance + static_cast<float>(colorBottomRight) * colMaxDistance) * linMaxDistance);
-                }
+                // Retrieve pixel from data buffer
+                getPixel(srcSlice, srcWidth, srcHeight, linMin, colMin, &colorTopLeft);
+                getPixel(srcSlice, srcWidth, srcHeight, linMin, colMax, &colorTopRight);
+                getPixel(srcSlice, srcWidth, srcHeight, linMax, colMin, &colorBottomLeft);
+                getPixel(srcSlice, srcWidth, srcHeight, linMax, colMax, &colorBottomRight);
+                // Interpolate and store value
+                dstSlice[lin * dstWidth + col] = float2uint8_t(
+                    (static_cast<float>(colorTopLeft) * colMinDistance + static_cast<float>(colorTopRight) * colMaxDistance) * linMinDistance +
+                    (static_cast<float>(colorBottomLeft) * colMinDistance + static_cast<float>(colorBottomRight) * colMaxDistance) * linMaxDistance);
             }
         }
 
@@ -380,34 +400,29 @@ int seq_scale(int srcWidth, int srcHeight, uint8_t* srcSlice[],
 
                 // Temporary variables used in the bicubic interpolation
                 uint8_t colorHolder;
-                float sum, wSum, weight;
-                // Bicubic interpolation operation for each color channel
-                for(int colorChannel = 0; colorChannel < 3; colorChannel++){
-                    // Reset temporary values
-                    sum = 0.f, wSum = 0.f;
-                    // Iterate through each row of neighboring pixels
-                    for(int linTemp = linMin; linTemp <= linMax; linTemp++){
-                        // Iterate through each of the neighboring pixels
-                        for(int colTemp = colMin; colTemp <= colMax; colTemp++){
-                            // Retrieve pixel from data buffer
-                            getPixel(srcSlice, colorChannel, srcWidth, srcHeight, linTemp, colTemp, &colorHolder);
-                            // Calculate weight of pixel in the bicubic interpolation
-                            weight = bcoef(abs(linOriginal - (static_cast<float>(linTemp) + 0.5f)))
-                                * bcoef(abs(colOriginal - (static_cast<float>(colTemp) + 0.5f)));
-                            // Sum weighted color values
-                            sum += static_cast<float>(colorHolder) * weight;
-                            // Sum weights
-                            wSum += weight;
-                        }
+                float sum = 0.f, wSum = 0.f, weight;
+                // Iterate through each row of neighboring pixels
+                for(int linTemp = linMin; linTemp <= linMax; linTemp++){
+                    // Iterate through each of the neighboring pixels
+                    for(int colTemp = colMin; colTemp <= colMax; colTemp++){
+                        // Retrieve pixel from data buffer
+                        getPixel(srcSlice, srcWidth, srcHeight, linTemp, colTemp, &colorHolder);
+                        // Calculate weight of pixel in the bicubic interpolation
+                        weight = bcoef(abs(linOriginal - (static_cast<float>(linTemp) + 0.5f)))
+                            * bcoef(abs(colOriginal - (static_cast<float>(colTemp) + 0.5f)));
+                        // Sum weighted color values
+                        sum += static_cast<float>(colorHolder) * weight;
+                        // Sum weights
+                        wSum += weight;
                     }
-
-                    // Calculate resulting color
-                    float result = sum / wSum;
-                    // Clamp value to avoid color undershooting and overshooting
-                    clamp(result, 0.0f, 255.0f);
-                    // Store the result value
-                    dstSlice[colorChannel][lin * dstWidth + col] = float2uint8_t(result);
                 }
+
+                // Calculate resulting color
+                float result = sum / wSum;
+                // Clamp value to avoid color undershooting and overshooting
+                clamp(result, 0.0f, 255.0f);
+                // Store the result value
+                dstSlice[lin * dstWidth + col] = float2uint8_t(result);
             }
         }
 
@@ -425,8 +440,7 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
 
     // Variables used
     int retVal = -1;
-    AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_YUV444P;
-    //AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_GBRP;
+    AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_YUV422P;
     uint8_t* resampleTempFrameBuffer,* scaleTempFrameBuffer;
     AVFrame* resampleTempFrame,* scaleTempFrame;
 
@@ -483,15 +497,24 @@ int seq_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uin
     }
 
     // Apply the scaling operation
-    retVal = seq_scale(srcWidth, srcHeight, resampleTempFrame->data,
-                       dstWidth, dstHeight, scaleTempFrame->data,
-                       operation);
-    if(retVal < 0){
-        av_frame_free(&resampleTempFrame);
-        free(resampleTempFrameBuffer);
-        av_frame_free(&scaleTempFrame);
-        free(scaleTempFrameBuffer);
-        return retVal;
+    for(int colorChannel = 0; colorChannel < 3; colorChannel++){
+        if(colorChannel == 0){
+            retVal = seq_scale(srcWidth, srcHeight, resampleTempFrame->data[0],
+                               dstWidth, dstHeight, scaleTempFrame->data[0],
+                               operation);
+        } else{
+            retVal = seq_scale(srcWidth / 2, srcHeight, resampleTempFrame->data[colorChannel],
+                               dstWidth / 2, dstHeight, scaleTempFrame->data[colorChannel],
+                               operation);
+        }
+
+        if(retVal < 0){
+            av_frame_free(&resampleTempFrame);
+            free(resampleTempFrameBuffer);
+            av_frame_free(&scaleTempFrame);
+            free(scaleTempFrameBuffer);
+            return retVal;
+        }
     }
 
     // Resamples results to the desired one

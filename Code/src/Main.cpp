@@ -21,38 +21,51 @@ int main(){
     // HD720  - 1280 x 720
     // -----------------------------------------------
     // INFO OF IMAGES USED IN TESTS ------------------
-    //ImageInfo imgDebug("imgs/xs.yuv", 2, 2, AV_PIX_FMT_YUV422P);
-    //ImageInfo imgDebug("imgs/square.yuv", 6, 6, AV_PIX_FMT_YUV422P);
-    //ImageInfo imgDebug("imgs/lin-yuv422p-6x6.yuv", 6, 6, AV_PIX_FMT_YUV422P);
-    //ImageInfo imgDebug("imgs/color.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
-    //ImageInfo imgDebug("imgs/rgb24-6x6.yuv", 6, 6, AV_PIX_FMT_RGB24);
-    ImageInfo imgDebug("imgs/rainbow-24x16.yuv", 24, 16, AV_PIX_FMT_YUV422P);
+    ImageInfo imgDebug("imgs/color-yuv422p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
 
     ImageInfo img01("imgs/uyvy422-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_UYVY422);
     ImageInfo img02("imgs/yuv420p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
     ImageInfo img03("imgs/yuv422p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
-    ImageInfo img04("imgs/yuv444p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV444P);
+
+    imgDebug = img02;
     // -----------------------------------------------
     // DEBUG VARIABLES -------------------------------
-    int nTimes = 1;
     int operation = SWS_BICUBIC;
-    ImageInfo outImg("imgs/output.yuv", 48, 32, AV_PIX_FMT_YUV422P);
+    int dstWidth = 7680;
+    int dstHeight = 4320;
+    AVPixelFormat dstFormat = AV_PIX_FMT_YUV422P;
+    ImageInfo outImgFFmpeg("imgs/z-output-ffmpeg.yuv", dstWidth, dstHeight, dstFormat);
+    ImageInfo outImgCustom("imgs/z-output-custom.yuv", dstWidth, dstHeight, dstFormat);
     // -----------------------------------------------
     // SCALING OPERATIONS ----------------------------
     // Initialize ffmpeg
     av_register_all();
 
-    // Apply the operations
+    // Apply the operations with ffmpeg
+    int nTimes = 1;
     while(nTimes > 0){
-        //int executionTime = ffmpeg_scale(imgDebug, outImg, operation);
-        int executionTime = sequential_scale(imgDebug, outImg, operation);
+        int executionTime = ffmpeg_scale(imgDebug, outImgFFmpeg, operation);
         if(executionTime < 0){
             cerr << "Could not execute the scaling method!" << endl;
             system("pause");
             return -1;
         }
 
-        cout << "Execution time was " << executionTime << " ms!" << endl;
+        cout << "[FFMPEG] Execution time was " << executionTime << " ms!" << endl;
+
+        nTimes--;
+    }
+
+    nTimes = 1;
+    while(nTimes > 0){
+        int executionTime = sequential_scale(imgDebug, outImgCustom, operation);
+        if(executionTime < 0){
+            cerr << "Could not execute the scaling method!" << endl;
+            system("pause");
+            return -1;
+        }
+
+        cout << "[CUSTOM] Execution time was " << executionTime << " ms!" << endl;
 
         nTimes--;
     }
