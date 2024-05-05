@@ -1,3 +1,0 @@
-http://www.imagemagick.org/discourse-server/viewtopic.php?t=19873
-
-convert feup.jpg -colorspace YUV -sampling-factor 4:4:4 -separate ( -clone 0 ) ( -clone 1 -fill black -colorize 100% ) ( -clone 1 -negate ) ( -clone 1 ) ( -clone 4 -clone 5 -clone 6 -combine ) ( -clone 2 ) ( -clone 2 -negate ) ( -clone 2 -fill black -colorize 100% ) ( -clone 8 -clone 9 -clone 10 -combine ) -delete 0-2,4-6,8-10 -append out.jpg
