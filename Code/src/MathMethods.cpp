@@ -25,3 +25,8 @@ int greatestDivisor(int num1, int num2){
 
     return holder;
 }
+
+// Fast round a value
+int roundFast(double value){
+    return static_cast<int>(value + .5 - (value < 0.));
+}

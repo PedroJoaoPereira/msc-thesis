@@ -2,7 +2,7 @@
 
 // Convert the pixel format of the image
 template <class PrecisionType>
-int sequential_formatConversion(int srcWidth, int srcHeight,
+int sequential_formatConversion(int width, int height,
     int srcPixelFormat, uint8_t* srcSlice[],
     int dstPixelFormat, uint8_t* dstSlice[]){
 
@@ -10,9 +10,9 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     if(srcPixelFormat == dstPixelFormat){
         // Copy data between buffers
         if(srcPixelFormat == AV_PIX_FMT_V210){
-            memcpy(dstSlice[0], srcSlice[0], ((srcWidth + 47) / 48) * 128 * srcHeight);
+            memcpy(dstSlice[0], srcSlice[0], ((width + 47) / 48) * 128 * height);
         } else if(srcPixelFormat == AV_PIX_FMT_UYVY422){
-            memcpy(dstSlice[0], srcSlice[0], srcWidth * 2 * srcHeight);
+            memcpy(dstSlice[0], srcSlice[0], width * 2 * height);
         } else{
             // Chroma size discovery
             float widthPerc = 1.f;
@@ -24,38 +24,38 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
             if(srcPixelFormat == AV_PIX_FMT_YUV420P)
                 heightPerc = 0.5f;
 
-            memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
-            memcpy(dstSlice[1], srcSlice[1], srcWidth * srcHeight * widthPerc * heightPerc);
-            memcpy(dstSlice[2], srcSlice[2], srcWidth * srcHeight * widthPerc * heightPerc);
+            memcpy(dstSlice[0], srcSlice[0], width * height);
+            memcpy(dstSlice[1], srcSlice[1], width * height * widthPerc * heightPerc);
+            memcpy(dstSlice[2], srcSlice[2], width * height * widthPerc * heightPerc);
         }
 
         // Success
         return 0;
     }
 
-    // REORGANIZE COMPONENTS -------------------------
+    #pragma region UYVY422
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 2;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto dstBuffer = dstSlice[0];
-        auto dstBufferChromaU = dstSlice[1];
-        auto dstBufferChromaV = dstSlice[2];
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
-            PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
-            PrecisionType v0 = static_cast<PrecisionType>(*srcBuffer++); // V0
-            PrecisionType y1 = static_cast<PrecisionType>(*srcBuffer++); // Y1
+        auto dstB = dstSlice[0];
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
 
-            *dstBuffer++ = y0;
-            *dstBuffer++ = y1;
-
-            *dstBufferChromaU++ = u0;
-            *dstBufferChromaV++ = v0;
+        // Iterate blocks of 1x4 channel points
+        for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                *dstU++ = *srcB++; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstV++ = *srcB++; // V0
+                *dstB++ = *srcB++; // Y1
+            }
         }
 
         // Success
@@ -63,49 +63,56 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
-        // Access once
-        int stride = srcWidth * 2;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv4 = stride / 4;
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
+        auto srcBb = srcB + hStrideUYVY422;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferBelow = srcBuffer + stride;
-        auto dstBuffer = dstSlice[0];
-        auto dstBufferBelow = dstBuffer + srcWidth;
-        auto dstBufferChromaU = dstSlice[1];
-        auto dstBufferChromaV = dstSlice[2];
+        auto dstB = dstSlice[0];
+        auto dstBb = dstB + hStrideYUV420P;
 
-        // Loop through each pixel
-        for(int lin = 0; lin < heightDiv2; lin++){
-            for(int col = 0; col < strideDiv4; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
-                PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBuffer++); // V0
-                PrecisionType y1 = static_cast<PrecisionType>(*srcBuffer++); // Y1
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
 
-                srcBufferBelow++;
-                PrecisionType y2 = static_cast<PrecisionType>(*srcBufferBelow++); // Y2
-                srcBufferBelow++;
-                PrecisionType y3 = static_cast<PrecisionType>(*srcBufferBelow++); // Y3
+        // Iterate blocks of 2x4 channel points
+        for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                // Get above line
+                uint8_t u0 = *srcB++; // U0
+                uint8_t y0 = *srcB++; // Y0
+                uint8_t v0 = *srcB++; // V0
+                uint8_t y1 = *srcB++; // Y1
 
-                *dstBuffer++ = y0;
-                *dstBuffer++ = y1;
+                // Get below line
+                *srcBb++; // U0
+                uint8_t y0b = *srcBb++; // Y0
+                *srcBb++; // V0
+                uint8_t y1b = *srcBb++; // Y1
 
-                *dstBufferBelow++ = y2;
-                *dstBufferBelow++ = y3;
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
 
-                *dstBufferChromaU++ = u0;
-                *dstBufferChromaV++ = v0;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+
+                // Assigne chroma values
+                *dstU++ = u0;
+                *dstV++ = v0;
             }
 
-            srcBuffer += stride;
-            srcBufferBelow += stride;
+            // At the end of each line of block 2x4 corrects pointers
+            srcB = srcBb;
+            srcBb += hStrideUYVY422;
 
-            dstBuffer += srcWidth;
-            dstBufferBelow += srcWidth;
+            dstB = dstBb;
+            dstBb += hStrideYUV420P;
         }
 
         // Success
@@ -113,108 +120,127 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
-        // Access once
-        int stride = srcWidth * 2;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv4 = stride / 4;
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
+        auto srcBb = srcB + hStrideUYVY422;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferBelow = srcBuffer + stride;
-        auto dstBuffer = dstSlice[0];
-        auto dstBufferBelow = dstBuffer + srcWidth;
-        auto dstBufferChroma = dstSlice[1];
+        auto dstB = dstSlice[0];
+        auto dstBb = dstB + hStrideNV12;
 
-        // Loop through each pixel
-        for(int lin = 0; lin < heightDiv2; lin++){
-            for(int col = 0; col < strideDiv4; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBuffer++); // U0
-                PrecisionType y0 = static_cast<PrecisionType>(*srcBuffer++); // Y0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBuffer++); // V0
-                PrecisionType y1 = static_cast<PrecisionType>(*srcBuffer++); // Y1
+        auto dstC = dstSlice[1];
 
-                srcBufferBelow++;
-                PrecisionType y2 = static_cast<PrecisionType>(*srcBufferBelow++); // Y2
-                srcBufferBelow++;
-                PrecisionType y3 = static_cast<PrecisionType>(*srcBufferBelow++); // Y3
+        // Iterate blocks of 2x4 channel points
+        for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 4; hIndex++){
+                // Get above line
+                uint8_t u0 = *srcB++; // U0
+                uint8_t y0 = *srcB++; // Y0
+                uint8_t v0 = *srcB++; // V0
+                uint8_t y1 = *srcB++; // Y1
 
-                *dstBuffer++ = y0;
-                *dstBuffer++ = y1;
+                // Get below line
+                *srcBb++; // U0
+                uint8_t y0b = *srcBb++; // Y0
+                *srcBb++; // V0
+                uint8_t y1b = *srcBb++; // Y1
 
-                *dstBufferBelow++ = y2;
-                *dstBufferBelow++ = y3;
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
 
-                *dstBufferChroma++ = u0;
-                *dstBufferChroma++ = v0;
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+
+                // Assigne chroma values
+                *dstC++ = u0;
+                *dstC++ = v0;
             }
 
-            srcBuffer += stride;
-            srcBufferBelow += stride;
+            // At the end of each line of block 2x4 corrects pointers
+            srcB = srcBb;
+            srcBb += hStrideUYVY422;
 
-            dstBuffer += srcWidth;
-            dstBufferBelow += srcWidth;
+            dstB = dstBb;
+            dstBb += hStrideNV12;
         }
-
         // Success
         return 0;
     }
 
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_V210){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 6;
+        // Used metrics
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]);
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
 
-        // Assign once
-        enum{ SHIFT_8TO10B = 2U, SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, };
+        auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            auto u0 = *srcBuffer++ << SHIFT_8TO10B; // U0
-            auto y0 = *srcBuffer++ << SHIFT_8TO10B; // Y0
-            auto v0 = *srcBuffer++ << SHIFT_8TO10B; // V0
-            auto y1 = *srcBuffer++ << SHIFT_8TO10B; // Y1
+        // Iterate blocks of 1x12 channel points
+        for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideUYVY422 / 12; hIndex++){
+                // Get components from source
+                auto u0 = *srcB++ << 2U; // U0
+                auto y0 = *srcB++ << 2U; // Y0
+                auto v0 = *srcB++ << 2U; // V0
+                auto y1 = *srcB++ << 2U; // Y1
 
-            auto u1 = *srcBuffer++ << SHIFT_8TO10B; // U1
-            auto y2 = *srcBuffer++ << SHIFT_8TO10B; // Y2
-            auto v1 = *srcBuffer++ << SHIFT_8TO10B; // V1
-            auto y3 = *srcBuffer++ << SHIFT_8TO10B; // Y3
+                auto u1 = *srcB++ << 2U; // U1
+                auto y2 = *srcB++ << 2U; // Y2
+                auto v1 = *srcB++ << 2U; // V1
+                auto y3 = *srcB++ << 2U; // Y3
 
-            auto u2 = *srcBuffer++ << SHIFT_8TO10B; // U2
-            auto y4 = *srcBuffer++ << SHIFT_8TO10B; // Y4
-            auto v2 = *srcBuffer++ << SHIFT_8TO10B; // V2
-            auto y5 = *srcBuffer++ << SHIFT_8TO10B; // Y5
+                auto u2 = *srcB++ << 2U; // U2
+                auto y4 = *srcB++ << 2U; // Y4
+                auto v2 = *srcB++ << 2U; // V2
+                auto y5 = *srcB++ << 2U; // Y5
 
-            *dstBuffer++ = (v0 << SHIFT_LEFT) | (y0 << SHIFT_MIDDLE) | u0;
-            *dstBuffer++ = (y2 << SHIFT_LEFT) | (u1 << SHIFT_MIDDLE) | y1;
-            *dstBuffer++ = (u2 << SHIFT_LEFT) | (y3 << SHIFT_MIDDLE) | v1;
-            *dstBuffer++ = (y5 << SHIFT_LEFT) | (v2 << SHIFT_MIDDLE) | y4;
+                // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
         }
 
         // Success
         return 0;
     }
+    #pragma endregion
 
+    #pragma region YUV422P
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 2;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto dstBuffer = dstSlice[0];
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            *dstBuffer++ = *srcBufferChromaU++; // U0
-            *dstBuffer++ = *srcBuffer++; // Y0
-            *dstBuffer++ = *srcBufferChromaV++; // V0
-            *dstBuffer++ = *srcBuffer++; // Y1
+        auto dstB = dstSlice[0];
+
+        // Iterate blocks of 1x2 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 2; hIndex++){
+                *dstB++ = *srcU++; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = *srcV++; // V0
+                *dstB++ = *srcB++; // Y1
+            }
         }
 
         // Success
@@ -222,41 +248,49 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P){
-        // Access once
-        int stride = srcWidth;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
+
+        // Discover buffer pointers
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
+
+        auto srcUb = srcU + hStrideYUV422PChroma;
+        auto srcVb = srcV + hStrideYUV422PChroma;
+
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
 
         // Luma plane is the same
-        memcpy(dstSlice[0], srcSlice[0], stride * srcHeight);
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv2 = stride / 2;
+        // Iterate blocks of 2x1 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                // Get above chroma values
+                uint8_t u = *srcU++; // U0
+                uint8_t v = *srcV++; // V0
 
-        // Buffer pointers
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
-        auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
-        auto dstBufferChromaU = dstSlice[1];
-        auto dstBufferChromaV = dstSlice[2];
+                // Get below chroma values
+                uint8_t ub = *srcUb++; // U1
+                uint8_t vb = *srcVb++; // V1
 
-        // Loop through each pixel
-        for(int lin = 0; lin < heightDiv2; lin++){
-            for(int col = 0; col < strideDiv2; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBufferChromaU++); // U0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBufferChromaV++); // V0
-
-                PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
-                PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
-
-                *dstBufferChromaU++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
-                *dstBufferChromaV++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
+                // Assign values
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
             }
 
-            srcBufferChromaU += strideDiv2;
-            srcBufferChromaV += strideDiv2;
-            srcBufferChromaUBelow += strideDiv2;
-            srcBufferChromaVBelow += strideDiv2;
+            // At the end of each line of block 2x1 corrects pointers
+            srcU = srcUb;
+            srcUb += hStrideYUV422PChroma;
+
+            srcV = srcVb;
+            srcVb += hStrideYUV422PChroma;
         }
 
         // Success
@@ -264,40 +298,48 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12){
-        // Access once
-        int stride = srcWidth;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
+
+        // Discover buffer pointers
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
+
+        auto srcUb = srcU + hStrideYUV422PChroma;
+        auto srcVb = srcV + hStrideYUV422PChroma;
+
+        auto dstC = dstSlice[1];
 
         // Luma plane is the same
-        memcpy(dstSlice[0], srcSlice[0], stride * srcHeight);
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
 
-        // Calculate once
-        int heightDiv2 = srcHeight / 2;
-        int strideDiv2 = stride / 2;
+        // Iterate blocks of 2x1 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                // Get above chroma values
+                uint8_t u = *srcU++; // U0
+                uint8_t v = *srcV++; // V0
 
-        // Buffer pointers
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
-        auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
-        auto dstBufferChroma = dstSlice[1];
+                // Get below chroma values
+                uint8_t ub = *srcUb++; // U1
+                uint8_t vb = *srcVb++; // V1
 
-        // Loop through each pixel
-        for(int lin = 0; lin < heightDiv2; lin++){
-            for(int col = 0; col < strideDiv2; col++){
-                PrecisionType u0 = static_cast<PrecisionType>(*srcBufferChromaU++); // U0
-                PrecisionType v0 = static_cast<PrecisionType>(*srcBufferChromaV++); // V0
-
-                PrecisionType u1 = static_cast<PrecisionType>(*srcBufferChromaUBelow++); // U1
-                PrecisionType v1 = static_cast<PrecisionType>(*srcBufferChromaVBelow++); // V1
-
-                *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((u0 + u1) / static_cast<PrecisionType>(2.));
-                *dstBufferChroma++ = roundTo<uint8_t, PrecisionType>((v0 + v1) / static_cast<PrecisionType>(2.));
+                // Assign values
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
             }
 
-            srcBufferChromaU += strideDiv2;
-            srcBufferChromaV += strideDiv2;
-            srcBufferChromaUBelow += strideDiv2;
-            srcBufferChromaVBelow += strideDiv2;
+            // At the end of each line of block 2x1 corrects pointers
+            srcU = srcUb;
+            srcUb += hStrideYUV422PChroma;
+
+            srcV = srcVb;
+            srcVb += hStrideYUV422PChroma;
         }
 
         // Success
@@ -305,92 +347,496 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_V210){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 6;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]);
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
 
-        // Assign once
-        enum{ SHIFT_8TO10B = 2U, SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, };
+        auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            auto u0 = *srcBufferChromaU++ << SHIFT_8TO10B; // U0
-            auto y0 = *srcBuffer++ << SHIFT_8TO10B; // Y0
-            auto v0 = *srcBufferChromaV++ << SHIFT_8TO10B; // V0
-            auto y1 = *srcBuffer++ << SHIFT_8TO10B; // Y1
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
 
-            auto u1 = *srcBufferChromaU++ << SHIFT_8TO10B; // U1
-            auto y2 = *srcBuffer++ << SHIFT_8TO10B; // Y2
-            auto v1 = *srcBufferChromaV++ << SHIFT_8TO10B; // V1
-            auto y3 = *srcBuffer++ << SHIFT_8TO10B; // Y3
+        // Iterate blocks of 1x6 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 6; hIndex++){
+                // Get components from source
+                auto u0 = *srcU++ << 2U; // U0
+                auto y0 = *srcB++ << 2U; // Y0
+                auto v0 = *srcV++ << 2U; // V0
+                auto y1 = *srcB++ << 2U; // Y1
 
-            auto u2 = *srcBufferChromaU++ << SHIFT_8TO10B; // U2
-            auto y4 = *srcBuffer++ << SHIFT_8TO10B; // Y4
-            auto v2 = *srcBufferChromaV++ << SHIFT_8TO10B; // V2
-            auto y5 = *srcBuffer++ << SHIFT_8TO10B; // Y5
+                auto u1 = *srcU++ << 2U; // U1
+                auto y2 = *srcB++ << 2U; // Y2
+                auto v1 = *srcV++ << 2U; // V1
+                auto y3 = *srcB++ << 2U; // Y3
 
-            *dstBuffer++ = (v0 << SHIFT_LEFT) | (y0 << SHIFT_MIDDLE) | u0;
-            *dstBuffer++ = (y2 << SHIFT_LEFT) | (u1 << SHIFT_MIDDLE) | y1;
-            *dstBuffer++ = (u2 << SHIFT_LEFT) | (y3 << SHIFT_MIDDLE) | v1;
-            *dstBuffer++ = (y5 << SHIFT_LEFT) | (v2 << SHIFT_MIDDLE) | y4;
+                auto u2 = *srcU++ << 2U; // U2
+                auto y4 = *srcB++ << 2U; // Y4
+                auto v2 = *srcV++ << 2U; // V2
+                auto y5 = *srcB++ << 2U; // Y5
+
+                // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
+        }
+
+        // Success
+        return 0;
+    }
+    #pragma endregion
+
+    #pragma region YUV420P
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
+        auto srcBb = srcB + hStrideYUV420P;
+
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
+
+        auto dstB = dstSlice[0];
+        auto dstBb = dstB + hStrideUYVY422;
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcU++; // U
+                uint8_t v = *srcV++; // V
+
+                // Assign above line values
+                *dstB++ = u; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = v; // V0
+                *dstB++ = *srcB++; // Y1
+
+                // Assign below line values
+                *dstBb++ = u; // U0
+                *dstBb++ = *srcBb++; // Y0
+                *dstBb++ = v; // V0
+                *dstBb++ = *srcBb++; // Y1
+            }
+
+            // At the end of each line of block 2x2 corrects pointers
+            srcB = srcBb;
+            srcBb += width;
+
+            dstB = dstBb;
+            dstBb += hStrideUYVY422;
         }
 
         // Success
         return 0;
     }
 
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
+
+        // Discover buffer pointers
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
+
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
+
+        auto dstUb = dstU + hStrideYUV422PChroma;
+        auto dstVb = dstV + hStrideYUV422PChroma;
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcU++; // U
+                uint8_t v = *srcV++; // V
+
+                // Assign values dupicated
+                *dstU++ = u;
+                *dstV++ = v;
+
+                *dstUb++ = u;
+                *dstVb++ = v;
+            }
+
+            // At the end of each line of block 2x2 corrects pointers
+            dstU = dstUb;
+            dstUb += hStrideYUV422PChroma;
+
+            dstV = dstVb;
+            dstVb += hStrideYUV422PChroma;
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+
+        // Discover buffer pointers
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
+
+        auto dstC = dstSlice[1];
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                *dstC++ = *srcU++; // U
+                *dstC++ = *srcV++; // V
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_V210){
+        // Used metrics
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+
+        // Discover buffer pointers
+        auto srcY = srcSlice[0];
+        auto srcYb = srcY + hStrideYUV420P;
+
+        auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
+        auto dstBb = dstB + hStrideV210;
+
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 6; hIndex++){
+                // Get lumas from above line
+                auto y0 = *srcY++ << 2U;
+                auto y1 = *srcY++ << 2U;
+                auto y2 = *srcY++ << 2U;
+                auto y3 = *srcY++ << 2U;
+                auto y4 = *srcY++ << 2U;
+                auto y5 = *srcY++ << 2U;
+
+                // Get lumas from below line
+                auto y0b = *srcYb++ << 2U;
+                auto y1b = *srcYb++ << 2U;
+                auto y2b = *srcYb++ << 2U;
+                auto y3b = *srcYb++ << 2U;
+                auto y4b = *srcYb++ << 2U;
+                auto y5b = *srcYb++ << 2U;
+
+                // Get chroma U
+                auto u0 = *srcU++ << 2U;
+                auto u1 = *srcU++ << 2U;
+                auto u2 = *srcU++ << 2U;
+
+                // Get chroma V
+                auto v0 = *srcV++ << 2U;
+                auto v1 = *srcV++ << 2U;
+                auto v2 = *srcV++ << 2U;
+
+                // Assign above line
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+
+                // Assign below line
+                *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
+                *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
+                *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
+                *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+            }
+
+            // At the end of each line of block 2x2 corrects pointers
+            srcY = srcYb;
+            srcYb += hStrideYUV420P;
+
+            dstB = dstBb;
+            dstBb += hStrideV210;
+        }
+
+        // Success
+        return 0;
+    }
+    #pragma endregion
+
+    #pragma region NV12
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideUYVY422 = height;
+        int hStrideUYVY422 = width * 2;
+
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
+        auto srcBb = srcB + hStrideNV12;
+
+        auto srcC = srcSlice[1];
+
+        auto dstB = dstSlice[0];
+        auto dstBb = dstB + hStrideUYVY422;
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcC++; // U
+                uint8_t v = *srcC++; // V
+
+                // Assign above line values
+                *dstB++ = u; // U0
+                *dstB++ = *srcB++; // Y0
+                *dstB++ = v; // V0
+                *dstB++ = *srcB++; // Y1
+
+                // Assign below line values
+                *dstBb++ = u; // U0
+                *dstBb++ = *srcBb++; // Y0
+                *dstBb++ = v; // V0
+                *dstBb++ = *srcBb++; // Y1
+            }
+
+            // At the end of each line of block 2x2 corrects pointers
+            srcB = srcBb;
+            srcBb += width;
+
+            dstB = dstBb;
+            dstBb += hStrideUYVY422;
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+
+        int hStrideYUV422PChroma = hStrideYUV422P / 2;
+
+        // Discover buffer pointers
+        auto srcC = srcSlice[1];
+
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
+
+        auto dstUb = dstU + hStrideYUV422PChroma;
+        auto dstVb = dstV + hStrideYUV422PChroma;
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcC++; // U
+                uint8_t v = *srcC++; // V
+
+                // Assign values dupicated
+                *dstU++ = u;
+                *dstV++ = v;
+
+                *dstUb++ = u;
+                *dstVb++ = v;
+            }
+
+            // At the end of each line of block 2x2 corrects pointers
+            dstU = dstUb;
+            dstUb += hStrideYUV422PChroma;
+
+            dstV = dstVb;
+            dstVb += hStrideYUV422PChroma;
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+
+        // Discover buffer pointers
+        auto srcC = srcSlice[1];
+
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideNV12; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideNV12 / 4; hIndex++){
+                *dstU++ = *srcC++; // U
+                *dstV++ = *srcC++; // V
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_V210){
+        // Used metrics
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
+        auto srcBb = srcB + hStrideNV12;
+
+        auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
+        auto dstBb = dstB + hStrideV210;
+
+        auto srcC = srcSlice[1];
+
+        // Iterate blocks of 2x2 channel points
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideNV12 / 6; hIndex++){
+                // Get lumas from above line
+                auto y0 = *srcB++ << 2U;
+                auto y1 = *srcB++ << 2U;
+                auto y2 = *srcB++ << 2U;
+                auto y3 = *srcB++ << 2U;
+                auto y4 = *srcB++ << 2U;
+                auto y5 = *srcB++ << 2U;
+
+                // Get lumas from below line
+                auto y0b = *srcBb++ << 2U;
+                auto y1b = *srcBb++ << 2U;
+                auto y2b = *srcBb++ << 2U;
+                auto y3b = *srcBb++ << 2U;
+                auto y4b = *srcBb++ << 2U;
+                auto y5b = *srcBb++ << 2U;
+
+                // Get chroma U and V
+                auto u0 = *srcC++ << 2U;
+                auto v0 = *srcC++ << 2U;
+                auto u1 = *srcC++ << 2U;
+                auto v1 = *srcC++ << 2U;
+                auto u2 = *srcC++ << 2U;
+                auto v2 = *srcC++ << 2U;                
+
+                // Assign above line
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+
+                // Assign below line
+                *dstBb++ = (v0 << 20U) | (y0b << 10U) | u0;
+                *dstBb++ = (y2b << 20U) | (u1 << 10U) | y1b;
+                *dstBb++ = (u2 << 20U) | (y3b << 10U) | v1;
+                *dstBb++ = (y5b << 20U) | (v2 << 10U) | y4b;
+            }
+
+            // At the end of each line of block 2x2 corrects pointers
+            srcB = srcBb;
+            srcBb += hStrideNV12;
+
+            dstB = dstBb;
+            dstBb += hStrideV210;
+        }
+
+        // Success
+        return 0;
+    }
+    #pragma endregion
+
+    #pragma region V210
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422){
-        // Number of elements
-        long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
 
-        // Buffer pointers
-        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]);
-        auto dstBuffer = dstSlice[0];
+        // Discover buffer pointers
+        auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
 
-        // Assign once
-        enum{ SHIFT_10TO8B = 2U, SHIFT_RIGHT = 20U, SHIFT_MIDDLE = 10U, XFF = 0xFF, };
+        auto dstB = dstSlice[0];
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            auto u0 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // U0
-            auto y0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y0
-            auto v0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // V0
-            *srcBuffer++;
+        // Iterate blocks of 1x4 channel points
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-            auto y1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y1
-            auto u1 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // U1
-            auto y2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y2
-            *srcBuffer++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-            auto v1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // V1
-            auto y3 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y3
-            auto u2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // U2
-            *srcBuffer++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-            auto y4 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y4
-            auto v2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // V2
-            auto y5 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y5
-            *srcBuffer++;
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-            *(dstBuffer++) = u0;
-            *(dstBuffer++) = y0;
-            *(dstBuffer++) = v0;
-            *(dstBuffer++) = y1;
+                *(dstB++) = u0;
+                *(dstB++) = y0;
+                *(dstB++) = v0;
+                *(dstB++) = y1;
 
-            *(dstBuffer++) = u1;
-            *(dstBuffer++) = y2;
-            *(dstBuffer++) = v1;
-            *(dstBuffer++) = y3;
+                *(dstB++) = u1;
+                *(dstB++) = y2;
+                *(dstB++) = v1;
+                *(dstB++) = y3;
 
-            *(dstBuffer++) = u2;
-            *(dstBuffer++) = y4;
-            *(dstBuffer++) = v2;
-            *(dstBuffer++) = y5;
+                *(dstB++) = u2;
+                *(dstB++) = y4;
+                *(dstB++) = v2;
+                *(dstB++) = y5;
+            }
         }
 
         // Success
@@ -398,54 +844,256 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422P){
-        // Number of elements
-        long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Buffer pointers
-        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]);
-        auto dstBuffer = dstSlice[0];
-        auto dstBufferChromaU = dstSlice[1];
-        auto dstBufferChromaV = dstSlice[2];
+        // Discover buffer pointers
+        auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
 
-        // Assign once
-        enum{ SHIFT_10TO8B = 2U, SHIFT_RIGHT = 20U, SHIFT_MIDDLE = 10U, XFF = 0xFF, };
+        auto dstB = dstSlice[0];
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            auto u0 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // U0
-            auto y0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y0
-            auto v0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // V0
-            *srcBuffer++;
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
 
-            auto y1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y1
-            auto u1 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // U1
-            auto y2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y2
-            *srcBuffer++;
+        // Iterate blocks of 1x4 channel points
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-            auto v1 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // V1
-            auto y3 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y3
-            auto u2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // U2
-            *srcBuffer++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-            auto y4 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // Y4
-            auto v2 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // V2
-            auto y5 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_RIGHT) & XFF; // Y5
-            *srcBuffer++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-            *(dstBufferChromaU++) = u0;
-            *(dstBuffer++) = y0;
-            *(dstBufferChromaV++) = v0;
-            *(dstBuffer++) = y1;
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-            *(dstBufferChromaU++) = u1;
-            *(dstBuffer++) = y2;
-            *(dstBufferChromaV++) = v1;
-            *(dstBuffer++) = y3;
+                *(dstU++) = u0;
+                *(dstB++) = y0;
+                *(dstV++) = v0;
+                *(dstB++) = y1;
 
-            *(dstBufferChromaU++) = u2;
-            *(dstBuffer++) = y4;
-            *(dstBufferChromaV++) = v2;
-            *(dstBuffer++) = y5;
+                *(dstU++) = u1;
+                *(dstB++) = y2;
+                *(dstV++) = v1;
+                *(dstB++) = y3;
+
+                *(dstU++) = u2;
+                *(dstB++) = y4;
+                *(dstV++) = v2;
+                *(dstB++) = y5;
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideYUV420P = height;
+        int hStrideYUV420P = width;
+
+        // Discover buffer pointers
+        auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
+        auto srcBb = srcB + hStrideV210;
+
+        auto dstB = dstSlice[0];
+        auto dstBb = dstB + hStrideYUV420P;
+
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
+
+        // Iterate blocks of 2x4 channel points
+        for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                // Get above line
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
+
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
+
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
+
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
+
+                // Get below line
+                auto u0b = (*srcBb >> 2U) & 0xFF; // U0
+                auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
+                *srcBb++;
+
+                auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
+                auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
+                auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
+                *srcBb++;
+
+                auto v1b = (*srcBb >> 2U) & 0xFF; // V1
+                auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
+                *srcBb++;
+
+                auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
+                auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
+                auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
+                *srcBb++;
+
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
+                *dstB++ = y2;
+                *dstB++ = y3;
+                *dstB++ = y4;
+                *dstB++ = y5;
+
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+                *dstBb++ = y2b;
+                *dstBb++ = y3b;
+                *dstBb++ = y4b;
+                *dstBb++ = y5b;
+
+                // Assign chroma values
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
+                *dstU++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
+
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
+                *dstV++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+            }
+
+            // At the end of each line of block 2x4 corrects pointers
+            srcB = srcBb;
+            srcBb += hStrideV210;
+
+            dstB = dstBb;
+            dstBb += hStrideYUV420P;
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideNV12 = height;
+        int hStrideNV12 = width;
+
+        // Discover buffer pointers
+        auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
+        auto srcBb = srcB + hStrideV210;
+
+        auto dstB = dstSlice[0];
+        auto dstBb = dstB + hStrideNV12;
+
+        auto dstC = dstSlice[1];
+
+        // Iterate blocks of 2x4 channel points
+        for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                // Get above line
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
+
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
+
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
+
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
+
+                // Get below line
+                auto u0b = (*srcBb >> 2U) & 0xFF; // U0
+                auto y0b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0b = ((*srcBb >> 2U) >> 20U) & 0xFF; // V0
+                *srcBb++;
+
+                auto y1b = (*srcBb >> 2U) & 0xFF; // Y1
+                auto u1b = ((*srcBb >> 2U) >> 10U) & 0xFF; // U1
+                auto y2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y2
+                *srcBb++;
+
+                auto v1b = (*srcBb >> 2U) & 0xFF; // V1
+                auto y3b = ((*srcBb >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2b = ((*srcBb >> 2U) >> 20U) & 0xFF; // U2
+                *srcBb++;
+
+                auto y4b = (*srcBb >> 2U) & 0xFF; // Y4
+                auto v2b = ((*srcBb >> 2U) >> 10U) & 0xFF; // V2
+                auto y5b = ((*srcBb >> 2U) >> 20U) & 0xFF; // Y5
+                *srcBb++;
+
+                // Assign above luma values
+                *dstB++ = y0;
+                *dstB++ = y1;
+                *dstB++ = y2;
+                *dstB++ = y3;
+                *dstB++ = y4;
+                *dstB++ = y5;
+
+                // Assign below luma values
+                *dstBb++ = y0b;
+                *dstBb++ = y1b;
+                *dstBb++ = y2b;
+                *dstBb++ = y3b;
+                *dstBb++ = y4b;
+                *dstBb++ = y5b;
+
+                // Assign chroma values
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
+                *dstC++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+            }
+
+            // At the end of each line of block 2x4 corrects pointers
+            srcB = srcBb;
+            srcBb += hStrideV210;
+
+            dstB = dstBb;
+            dstBb += hStrideNV12;
         }
 
         // Success
@@ -453,124 +1101,138 @@ int sequential_formatConversion(int srcWidth, int srcHeight,
     }
 
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_YUV422PNORM){
-        // Number of elements
-        long numElements = ((srcWidth + 47) / 48) * 128 * srcHeight / 16;
+        // Used metrics
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
 
-        // Buffer pointers
-        auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]);
-        auto dstBuffer = dstSlice[0];
-        auto dstBufferChromaU = dstSlice[1];
-        auto dstBufferChromaV = dstSlice[2];
+        // Discover buffer pointers
+        auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]);
 
-        // Calculate once
-        PrecisionType valueConstLuma = static_cast<PrecisionType>(219.) / static_cast<PrecisionType>(1023.);
-        PrecisionType valueConstChroma = static_cast<PrecisionType>(224.) / static_cast<PrecisionType>(1023.);
-        PrecisionType value16 = static_cast<PrecisionType>(16.);
+        auto dstB = dstSlice[0];
 
-        // Assign once
-        enum{ SHIFT_RIGHT = 20U, SHIFT_MIDDLE = 10U, X3FF = 0x3FF, };
+        auto dstU = dstSlice[1];
+        auto dstV = dstSlice[2];
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            auto u0 = *srcBuffer & X3FF; // U0
-            auto y0 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // Y0
-            auto v0 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // V0
-            *srcBuffer++;
+        // Create const for normalization
+        double constLuma = 219. / 1023.;
+        double constChroma = 224. / 1023.;
+        double const16 = 16.;
 
-            auto y1 = *srcBuffer & X3FF; // Y1
-            auto u1 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // U1
-            auto y2 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // Y2
-            *srcBuffer++;
+        // Iterate blocks of 1x4 channel points
+        for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideV210 / 4; hIndex++){
+                auto u0 = (*srcB >> 2U) & 0xFF; // U0
+                auto y0 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y0
+                auto v0 = ((*srcB >> 2U) >> 20U) & 0xFF; // V0
+                *srcB++;
 
-            auto v1 = *srcBuffer & X3FF; // V1
-            auto y3 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // Y3
-            auto u2 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // U2
-            *srcBuffer++;
+                auto y1 = (*srcB >> 2U) & 0xFF; // Y1
+                auto u1 = ((*srcB >> 2U) >> 10U) & 0xFF; // U1
+                auto y2 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y2
+                *srcB++;
 
-            auto y4 = *srcBuffer & X3FF; // Y4
-            auto v2 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // V2
-            auto y5 = (*srcBuffer >> SHIFT_RIGHT) & X3FF; // Y5
-            *srcBuffer++;
+                auto v1 = (*srcB >> 2U) & 0xFF; // V1
+                auto y3 = ((*srcB >> 2U) >> 10U) & 0xFF; // Y3
+                auto u2 = ((*srcB >> 2U) >> 20U) & 0xFF; // U2
+                *srcB++;
 
-            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u0) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y0) * valueConstLuma + value16);
-            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v0) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y1) * valueConstLuma + value16);
+                auto y4 = (*srcB >> 2U) & 0xFF; // Y4
+                auto v2 = ((*srcB >> 2U) >> 10U) & 0xFF; // V2
+                auto y5 = ((*srcB >> 2U) >> 20U) & 0xFF; // Y5
+                *srcB++;
 
-            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u1) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y2) * valueConstLuma + value16);
-            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v1) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y3) * valueConstLuma + value16);
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u0) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y0) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v0) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y1) * constLuma + const16));
 
-            *(dstBufferChromaU++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(u2) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y4) * valueConstLuma + value16);
-            *(dstBufferChromaV++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(v2) * valueConstChroma + value16);
-            *(dstBuffer++) = roundTo<uint8_t, PrecisionType>(static_cast<PrecisionType>(y5) * valueConstLuma + value16);
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u1) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y2) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v1) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y3) * constLuma + const16));
+
+                *dstU++ = uint8_t(roundFast(static_cast<double>(u2) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y4) * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(static_cast<double>(v2) * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(static_cast<double>(y5) * constLuma + const16));
+            }
         }
 
         // Success
         return 0;
     }
+    #pragma endregion
 
+    #pragma region YUV422PNORM
     if(srcPixelFormat == AV_PIX_FMT_YUV422PNORM && dstPixelFormat == AV_PIX_FMT_V210){
-        // Number of elements
-        long numElements = srcWidth * srcHeight / 6;
+        // Used metrics
+        int vStrideYUV422P = height;
+        int hStrideYUV422P = width;
+        int vStrideV210 = height;
+        int hStrideV210 = width / 6 * 4;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]);
+        // Discover buffer pointers
+        auto srcB = srcSlice[0];
 
-        // Calculate once
-        PrecisionType value16 = static_cast<PrecisionType>(16.);
-        PrecisionType valueConstLuma = static_cast<PrecisionType>(1023.) / static_cast<PrecisionType>(219.);
-        PrecisionType valueConstChroma = static_cast<PrecisionType>(1023.) / static_cast<PrecisionType>(224.);
+        auto dstB = reinterpret_cast<uint32_t*>(dstSlice[0]);
 
-        // Assign once
-        enum{ SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, X3FF = 0x3FF, };
+        auto srcU = srcSlice[1];
+        auto srcV = srcSlice[2];
 
-        // Loop through each pixel
-        for(int index = 0; index < numElements; index++){
-            auto u0bpp8 = *srcBufferChromaU++; // U0
-            auto y0bpp8 = *srcBuffer++; // Y0
-            auto v0bpp8 = *srcBufferChromaV++; // V0
-            auto y1bpp8 = *srcBuffer++; // Y1
+        // Create const for normalization
+        double const16 = 16.;
+        double constLuma = 1023. / 219.;
+        double constChroma = 1023. / 224.;
 
-            auto u1bpp8 = *srcBufferChromaU++; // U1
-            auto y2bpp8 = *srcBuffer++; // Y2
-            auto v1bpp8 = *srcBufferChromaV++; // V1
-            auto y3bpp8 = *srcBuffer++; // Y3
+        // Iterate blocks of 1x6 channel points
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 6; hIndex++){
+                // Get components from source
+                auto u0n = *srcU++ << 2U; // U0
+                auto y0n = *srcB++ << 2U; // Y0
+                auto v0n = *srcV++ << 2U; // V0
+                auto y1n = *srcB++ << 2U; // Y1
 
-            auto u2bpp8 = *srcBufferChromaU++; // U2
-            auto y4bpp8 = *srcBuffer++; // Y4
-            auto v2bpp8 = *srcBufferChromaV++; // V2
-            auto y5bpp8 = *srcBuffer++; // Y5
+                auto u1n = *srcU++ << 2U; // U1
+                auto y2n = *srcB++ << 2U; // Y2
+                auto v1n = *srcV++ << 2U; // V1
+                auto y3n = *srcB++ << 2U; // Y3
 
-            auto v0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v0bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y0bpp8) - value16) * valueConstLuma) & X3FF;
-            auto u0 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u0bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y2bpp8) - value16) * valueConstLuma) & X3FF;
+                auto u2n = *srcU++ << 2U; // U2
+                auto y4n = *srcB++ << 2U; // Y4
+                auto v2n = *srcV++ << 2U; // V2
+                auto y5n = *srcB++ << 2U; // Y5
 
-            auto u1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u1bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y1bpp8) - value16) * valueConstLuma) & X3FF;
-            auto u2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(u2bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y3 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y3bpp8) - value16) * valueConstLuma) & X3FF;
+                // Denormalize values
+                auto v0 = uint16_t(roundFast((static_cast<double>(v0n) - const16) * constChroma)) & 0x3FF;
+                auto y0 = uint16_t(roundFast((static_cast<double>(y0n) - const16) * constLuma)) & 0x3FF;
+                auto u0 = uint16_t(roundFast((static_cast<double>(u0n) - const16) * constChroma)) & 0x3FF;
+                auto y2 = uint16_t(roundFast((static_cast<double>(y2n) - const16) * constLuma)) & 0x3FF;
 
-            auto v1 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v1bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y5 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y5bpp8) - value16) * valueConstLuma) & X3FF;
-            auto v2 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(v2bpp8) - value16) * valueConstChroma) & X3FF;
-            auto y4 = roundTo<uint16_t, PrecisionType>((static_cast<PrecisionType>(y4bpp8) - value16) * valueConstLuma) & X3FF;
+                auto u1 = uint16_t(roundFast((static_cast<double>(u1n) - const16) * constChroma)) & 0x3FF;
+                auto y1 = uint16_t(roundFast((static_cast<double>(y1n) - const16) * constLuma)) & 0x3FF;
+                auto u2 = uint16_t(roundFast((static_cast<double>(u2n) - const16) * constChroma)) & 0x3FF;
+                auto y3 = uint16_t(roundFast((static_cast<double>(y3n) - const16) * constLuma)) & 0x3FF;
 
-            *dstBuffer++ = (v0 << SHIFT_LEFT) | (y0 << SHIFT_MIDDLE) | u0;
-            *dstBuffer++ = (y2 << SHIFT_LEFT) | (u1 << SHIFT_MIDDLE) | y1;
-            *dstBuffer++ = (u2 << SHIFT_LEFT) | (y3 << SHIFT_MIDDLE) | v1;
-            *dstBuffer++ = (y5 << SHIFT_LEFT) | (v2 << SHIFT_MIDDLE) | y4;
+                auto v1 = uint16_t(roundFast((static_cast<double>(v1n) - const16) * constChroma)) & 0x3FF;
+                auto y5 = uint16_t(roundFast((static_cast<double>(y5n) - const16) * constLuma)) & 0x3FF;
+                auto v2 = uint16_t(roundFast((static_cast<double>(v2n) - const16) * constChroma)) & 0x3FF;
+                auto y4 = uint16_t(roundFast((static_cast<double>(y4n) - const16) * constLuma)) & 0x3FF;
+
+                // Assign value
+                *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
+                *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
+                *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
+                *dstB++ = (y5 << 20U) | (v2 << 10U) | y4;
+            }
         }
 
         // Success
         return 0;
     }
+    #pragma endregion
 
     // No conversion was supported
     return -1;
@@ -842,9 +1504,9 @@ int sequential_resample_aux(AVFrame* src, AVFrame* dst, int operation){
 
 // Wrapper for the sequential resample operation method
 int sequential_resample(AVFrame* src, AVFrame* dst, int operation){
-    // Variables used
-    int duration = -1;
-    high_resolution_clock::time_point initTime, stopTime;
+    // Access once
+    AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
+    AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
 
     // Verify valid frames
     if(src == nullptr || dst == nullptr){
@@ -852,40 +1514,47 @@ int sequential_resample(AVFrame* src, AVFrame* dst, int operation){
         return -1;
     }
 
-    AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
-    AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
+    // Verify valid input data
+    if(!src->data || !src->linesize || !dst->data || !dst->linesize){
+        cerr << "[SEQUENTIAL] Frame data buffers can not be null!" << endl;
+        return -1;
+    }
 
     // Verify valid input dimensions
     if(src->width < 0 || src->height < 0 || dst->width < 0 || dst->height < 0){
         cerr << "[SEQUENTIAL] Frame dimensions can not be a negative number!" << endl;
         return -1;
     }
+
+    // Verify if data is aligned
+    if(((src->width % 4 != 0 && srcFormat == AV_PIX_FMT_UYVY422) || (dst->width % 4 != 0 && dstFormat == AV_PIX_FMT_UYVY422)) &&
+        ((src->width % 12 != 0 && srcFormat == AV_PIX_FMT_V210) || (dst->width % 12 != 0 && dstFormat == AV_PIX_FMT_V210))){
+        cerr << "[SEQUENTIAL] Can not handle unaligned data!" << endl;
+        return -1;
+    }
+
     // Verify valid resize
     if((src->width < dst->width && src->height > dst->height) ||
         (src->width > dst->width && src->height < dst->height)){
         cerr << "[SEQUENTIAL] Can not upscale in an orientation and downscale another!" << endl;
         return -1;
     }
-    // Verify valid input data
-    if(!src->data || !src->linesize || !dst->data || !dst->linesize){
-        cerr << "[SEQUENTIAL] Frame data buffers can not be null!" << endl;
+
+    // Verify if supported conversion
+    if(!hasSupportedConversion(srcFormat, dstFormat)){
+        cerr << "[SEQUENTIAL] Pixel format conversion is not supported!" << endl;
         return -1;
     }
-    // Verify if supported pixel formats
-    if(!isSupportedFormat(srcFormat) || !isSupportedFormat(dstFormat)){
-        cerr << "[SEQUENTIAL] Frame pixel format is not supported!" << endl;
-        return -1;
-    }
-    // Verify if can convert a 10 bit format
-    if((src->width % 12 != 0 && srcFormat == AV_PIX_FMT_V210) || (dst->width % 12 != 0 && dstFormat == AV_PIX_FMT_V210)){
-        cerr << "[SEQUENTIAL] Can not handle 10 bit format because data is not aligned!" << endl;
-        return -1;
-    }
+
     // Verify if supported scaling operation
     if(!isSupportedOperation(operation)){
         cerr << "[SEQUENTIAL] Scaling operation is not supported" << endl;
         return -1;
     }
+
+    // Variables used
+    int duration = -1;
+    high_resolution_clock::time_point initTime, stopTime;
 
     // Start counting operation execution time
     initTime = high_resolution_clock::now();

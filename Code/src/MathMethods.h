@@ -11,6 +11,10 @@ int lcm(int num1, int num2);
 // Return the nearest value of num2 that is a divisor of num1
 int greatestDivisor(int num1, int num2);
 
+// double value - value to be rounded
+// Fast round a value
+int roundFast(double value);
+
 // TEMPLATES
 
 // PrecisionType num1   - first value
