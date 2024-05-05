@@ -21,6 +21,8 @@ int main(){
     // HD720  - 1280 x 720
     // -----------------------------------------------
     // INFO OF IMAGES USED IN TESTS ------------------
+    //ImageInfo imgDebug("imgs/xs.yuv", 2, 2, AV_PIX_FMT_YUV422P);
+    //ImageInfo imgDebug("imgs/square.yuv", 6, 6, AV_PIX_FMT_YUV422P);
     ImageInfo imgDebug("imgs/lin-yuv422p-6x6.yuv", 6, 6, AV_PIX_FMT_YUV422P);
 
     ImageInfo img01("imgs/uyvy422-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_UYVY422);
@@ -31,8 +33,7 @@ int main(){
     // DEBUG VARIABLES -------------------------------
     int nTimes = 1;
     int operation = SWS_BICUBIC;
-    ImageInfo outImg("imgs/output.yuv", 12, 12, AV_PIX_FMT_YUV422P);
-    //ImageInfo outImg("imgs/output.yuv", 3840, 2160, AV_PIX_FMT_YUV422P);
+    ImageInfo outImg("imgs/output.yuv", 60, 60, AV_PIX_FMT_YUV422P);
     // -----------------------------------------------
     // SCALING OPERATIONS ----------------------------
     // Initialize ffmpeg
@@ -42,7 +43,6 @@ int main(){
     while(nTimes > 0){
         //int executionTime = ffmpeg_scale(imgDebug, outImg, operation);
         int executionTime = sequential_scale(imgDebug, outImg, operation);
-        //int executionTime = sequential_scale(img01, outImg, operation);
         if(executionTime < 0){
             cerr << "Could not execute the scaling method!" << endl;
             system("pause");

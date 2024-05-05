@@ -36,11 +36,17 @@ int createImageDataBuffer(int width, int height, AVPixelFormat pixelFormat, uint
 // Initialize and transfer data to AVFrame
 int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat pixelFormat, AVFrame** frame);
 
-// int val  - value to be clamped
-// int min  - minimum limit of clamping
-// int max  - maximum limit of clamping
+// int& index   - pixel index to be clamped
+// int min      - minimum limit of the pixel index
+// int max      - maximum limit of the pixel index
+// Limit a pixel index value to a defined interval
+void clampPixel(int &index, int min, int max);
+
+// double val   - value to be clamped
+// double min   - minimum limit of clamping
+// double max   - maximum limit of clamping
 // Limit a value to a defined interval
-int clamp(float val, int min, int max);
+void clamp(double &val, double min, double max);
 
 // double value - value to be converted
 // Convert a double to an uint8_t
