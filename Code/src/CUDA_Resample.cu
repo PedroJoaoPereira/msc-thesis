@@ -218,29 +218,99 @@ __global__ void cubicScaleV(const int srcWidth, const int srcHeight, const int d
 }
 
 // Prepares the resample operation
-void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
-    // Access once
-    int srcWidth = src->width, srcHeight = src->height;
-    int srcFormat = src->format;
-    int dstWidth = dst->width, dstHeight = dst->height;
-    int dstFormat = dst->format;
+void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
+    int srcWidth, int srcHeight, int dstWidth, int dstHeight,
+    int srcWidthChroma, int srcHeightChroma, int dstWidthChroma, int dstHeightChroma,
+    int srcFormat, int dstFormat, int scaleFormat,     
+    uint8_t* &pinnedHost, cudaChannelFormatDesc &channelDesc, cudaArray* &ySrc, cudaArray* &uSrc, cudaArray* &vSrc,
+    uint8_t* &scaledDevice, int* &scaledDeviceSizes, cudaStream_t &streamY, cudaStream_t &streamU, cudaStream_t &streamV){
+
+    // Get scale ratios
+    float scaleHeightRatio = static_cast<float>(dstHeight) / static_cast<float>(srcHeight);
+    float scaleWidthRatio = static_cast<float>(dstWidth) / static_cast<float>(srcWidth);
+
+    // Buffers for first format conversion
+    uint8_t** toScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    toScalePtrs[0] = pinnedHost;
+    toScalePtrs[1] = toScalePtrs[0] + srcHeight * srcWidth;
+    toScalePtrs[2] = toScalePtrs[1] + srcHeightChroma * srcWidthChroma;
+    uint8_t** fromScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    fromScalePtrs[0] = toScalePtrs[2] + srcHeightChroma * srcWidthChroma;
+    fromScalePtrs[1] = fromScalePtrs[0] + dstHeight * dstWidth;
+    fromScalePtrs[2] = fromScalePtrs[1] + dstHeightChroma * dstWidthChroma;
+
+    // Format conversion operation
+    omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, toScalePtrs);
+
+    // Calculate launch parameters
+    pair<dim3, dim3> lumaLP = calculateResizeLP(dstWidth, dstHeight);
+    pair<dim3, dim3> chromaLP = calculateResizeLP(dstWidthChroma, dstHeightChroma);
+
+    // Calculate once the offsets
+    int offsetFrom0 = scaledDeviceSizes[0];
+    int offsetFrom1 = offsetFrom0 + scaledDeviceSizes[1];
+
+    // Scale each component
+    if(operation == SWS_POINT || operation == SWS_BILINEAR){
+        cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
+        scaleTexY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
+        cudaMemcpyAsync(fromScalePtrs[0], scaledDevice, dstHeight * dstWidth, cudaMemcpyDeviceToHost, streamY);
+
+        cudaMemcpyToArrayAsync(uSrc, 0, 0, toScalePtrs[1], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamU);
+        scaleTexU << <chromaLP.first, chromaLP.second, 0, streamU >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom0);
+        cudaMemcpyAsync(fromScalePtrs[1], scaledDevice + offsetFrom0, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamU);
+
+        cudaMemcpyToArrayAsync(vSrc, 0, 0, toScalePtrs[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamV);
+        scaleTexV << <chromaLP.first, chromaLP.second, 0, streamV >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom1);
+        cudaMemcpyAsync(fromScalePtrs[2], scaledDevice + offsetFrom1, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamV);
+    } else if(operation == SWS_BICUBIC){
+        cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
+        cubicScaleY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
+        cudaMemcpyAsync(fromScalePtrs[0], scaledDevice, dstHeight * dstWidth, cudaMemcpyDeviceToHost, streamY);
+
+        cudaMemcpyToArrayAsync(uSrc, 0, 0, toScalePtrs[1], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamU);
+        cubicScaleU << <chromaLP.first, chromaLP.second, 0, streamU >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom0);
+        cudaMemcpyAsync(fromScalePtrs[1], scaledDevice + offsetFrom0, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamU);
+
+        cudaMemcpyToArrayAsync(vSrc, 0, 0, toScalePtrs[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamV);
+        cubicScaleV << <chromaLP.first, chromaLP.second, 0, streamV >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom1);
+        cudaMemcpyAsync(fromScalePtrs[2], scaledDevice + offsetFrom1, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamV);
+    }
+
+    // Synchronize device
+    cudaDeviceSynchronize();
+
+    // Free used resources
+    free(toScalePtrs);
+
+    // Format conversion operation
+    omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
+
+    // Free used resources    
+    free(fromScalePtrs);
+
+    // Sucess
+    return;
+}
+
+// Initializes memory if needed and prepares variables
+void cuda_resampleStarter(AVFrame* src, AVFrame* dst, int operation,
+    int srcWidth, int srcHeight, int dstWidth, int dstHeight, int srcFormat, int dstFormat,
+    int nTimes){
 
     // Check if is only a format conversion
-    bool isOnlyFormatConversion = srcWidth == dstWidth && srcHeight == dstHeight;
-    // Changes image pixel format only
-    if(isOnlyFormatConversion){
-        // Format conversion operation
-        omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
+    if(srcWidth == dstWidth && srcHeight == dstHeight){
+        // Operate over frame n times
+        for(int nthTime = 0; nthTime < nTimes; nthTime++){
+            // Format conversion operation
+            omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
+        }
         // End resample operation
         return;
     }
 
     // Get standard supported pixel format in scaling
     int scaleFormat = getScaleFormat(srcFormat, dstFormat);
-
-    // Get scale ratios
-    float scaleHeightRatio = static_cast<float>(dstHeight) / static_cast<float>(srcHeight);
-    float scaleWidthRatio = static_cast<float>(dstWidth) / static_cast<float>(srcWidth);
 
     // Calculate the size of the chroma components
     int srcHeightChroma = srcHeight;
@@ -256,20 +326,9 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         dstHeightChroma /= 2;
     }
 
-    // Buffers for first format conversion
+    // Allocate host pinned memory
     uint8_t* pinnedHost;
     cudaMallocHost((void **) &pinnedHost, srcHeight * srcWidth + 2 * srcHeightChroma * srcWidthChroma + dstHeight * dstWidth + 2 * dstHeightChroma * dstWidthChroma);
-    uint8_t** toScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
-    toScalePtrs[0] = pinnedHost;
-    toScalePtrs[1] = toScalePtrs[0] + srcHeight * srcWidth;
-    toScalePtrs[2] = toScalePtrs[1] + srcHeightChroma * srcWidthChroma;
-    uint8_t** fromScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
-    fromScalePtrs[0] = toScalePtrs[2] + srcHeightChroma * srcWidthChroma;
-    fromScalePtrs[1] = fromScalePtrs[0] + dstHeight * dstWidth;
-    fromScalePtrs[2] = fromScalePtrs[1] + dstHeightChroma * dstWidthChroma;
-
-    // Format conversion operation
-    omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, toScalePtrs);
 
     // Create channel texture descriptor
     cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
@@ -307,9 +366,11 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     cudaBindTextureToArray(&texU, uSrc, &channelDesc);
     cudaBindTextureToArray(&texV, vSrc, &channelDesc);
 
-    // Calculate launch parameters
-    pair<dim3, dim3> lumaLP = calculateResizeLP(dstWidth, dstHeight);
-    pair<dim3, dim3> chromaLP = calculateResizeLP(dstWidthChroma, dstHeightChroma);
+    // Create target buffer in device
+    uint8_t* scaledDevice;
+    int* scaledDeviceSizes;
+    // Allocate source buffer in device
+    cudaAllocBuffers(scaledDevice, scaledDeviceSizes, dstWidth, dstHeight, scaleFormat);
 
     // Create cuda streams for concurrent execution of kernels
     cudaStream_t streamY, streamU, streamV;
@@ -317,71 +378,41 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     cudaStreamCreate(&streamU);
     cudaStreamCreate(&streamV);
 
-    // Create target buffer in device
-    uint8_t* scaledDevice;
-    int* scaledDeviceSizes;
-    // Allocate source buffer in device
-    cudaAllocBuffers(scaledDevice, scaledDeviceSizes, dstWidth, dstHeight, scaleFormat);
-    // Calculate once the offsets
-    int offsetFrom0 = scaledDeviceSizes[0];
-    int offsetFrom1 = offsetFrom0 + scaledDeviceSizes[1];
-
-    // Scale each component
-    if(operation == SWS_POINT || operation == SWS_BILINEAR){
-        cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
-        scaleTexY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
-        cudaMemcpyAsync(fromScalePtrs[0], scaledDevice, dstHeight * dstWidth, cudaMemcpyDeviceToHost, streamY);
-
-        cudaMemcpyToArrayAsync(uSrc, 0, 0, toScalePtrs[1], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamU);
-        scaleTexU << <chromaLP.first, chromaLP.second, 0, streamU >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom0);
-        cudaMemcpyAsync(fromScalePtrs[1], scaledDevice + offsetFrom0, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamU);
-
-        cudaMemcpyToArrayAsync(vSrc, 0, 0, toScalePtrs[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamV);
-        scaleTexV << <chromaLP.first, chromaLP.second, 0, streamV >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom1);
-        cudaMemcpyAsync(fromScalePtrs[2], scaledDevice + offsetFrom1, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamV);
-    } else if(operation == SWS_BICUBIC){
-        cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
-        cubicScaleY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
-        cudaMemcpyAsync(fromScalePtrs[0], scaledDevice, dstHeight * dstWidth, cudaMemcpyDeviceToHost, streamY);
-
-        cudaMemcpyToArrayAsync(uSrc, 0, 0, toScalePtrs[1], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamU);
-        cubicScaleU << <chromaLP.first, chromaLP.second, 0, streamU >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom0);
-        cudaMemcpyAsync(fromScalePtrs[1], scaledDevice + offsetFrom0, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamU);
-
-        cudaMemcpyToArrayAsync(vSrc, 0, 0, toScalePtrs[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamV);
-        cubicScaleV << <chromaLP.first, chromaLP.second, 0, streamV >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom1);
-        cudaMemcpyAsync(fromScalePtrs[2], scaledDevice + offsetFrom1, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamV);
+    // Operate over frame n times
+    for(int nthTime = 0; nthTime < nTimes; nthTime++){
+        // Apply the scaling operation
+        cuda_resample_aux(src, dst, operation,
+            srcWidth, srcHeight, dstWidth, dstHeight,
+            srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma,
+            srcFormat, dstFormat, scaleFormat,
+            pinnedHost, channelDesc, ySrc, uSrc, vSrc,
+            scaledDevice, scaledDeviceSizes, streamY, streamU, streamV);
     }
 
-    // Synchronize device
-    cudaDeviceSynchronize();
-
-    // Free used resources
-    free(scaledDeviceSizes);
-
-    cudaFree(scaledDevice);
-    
+    // Delete cuda arrays
     cudaFreeArray(ySrc);
     cudaFreeArray(uSrc);
     cudaFreeArray(vSrc);
 
-    // Format conversion operation
-    omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
-
     // Free used resources
-    cudaFreeHost(pinnedHost);
-    free(toScalePtrs);
-    free(fromScalePtrs);
+    cudaFree(scaledDevice);
+    free(scaledDeviceSizes);
 
-    // Sucess
-    return;
+    cudaStreamDestroy(streamY);
+    cudaStreamDestroy(streamU);
+    cudaStreamDestroy(streamV);
+
+    // Deallocate host pinned memory
+    cudaFreeHost(pinnedHost);
 }
 
 // Wrapper for the cuda resample operation method
-int cuda_resample(AVFrame* src, AVFrame* dst, int operation){
+int cuda_resample(AVFrame* src, AVFrame* dst, int operation, int nTimes){
     // Access once
-    AVPixelFormat srcFormat = static_cast<AVPixelFormat>(src->format);
-    AVPixelFormat dstFormat = static_cast<AVPixelFormat>(dst->format);
+    int srcWidth = src->width, srcHeight = src->height;
+    int srcFormat = src->format;
+    int dstWidth = dst->width, dstHeight = dst->height;
+    int dstFormat = dst->format;
 
     // Verify valid frames
     if(src == nullptr || dst == nullptr){
@@ -396,37 +427,37 @@ int cuda_resample(AVFrame* src, AVFrame* dst, int operation){
     }
 
     // Verify valid input dimensions
-    if(src->width < 0 || src->height < 0 || dst->width < 0 || dst->height < 0){
+    if(srcWidth < 0 || srcHeight < 0 || dstWidth < 0 || dstHeight < 0){
         cerr << "[CUDA] Frame dimensions can not be a negative number!" << endl;
         return -1;
     }
 
     // Verify if data is aligned
     if(srcFormat == AV_PIX_FMT_UYVY422 || dstFormat == AV_PIX_FMT_UYVY422){
-        if((src->width % 4 != 0) || (dst->width % 4 != 0)){
+        if((srcWidth % 4 != 0) || (dstWidth % 4 != 0)){
             cerr << "[CUDA] Can not handle unaligned data!" << endl;
             return -1;
         }
-        if((src->height % 4 != 0) || (dst->height % 4 != 0)){
+        if((srcHeight % 4 != 0) || (dstHeight % 4 != 0)){
             cerr << "[CUDA] Can not handle unaligned data!" << endl;
             return -1;
         }
     }
 
     if(srcFormat == AV_PIX_FMT_V210 || dstFormat == AV_PIX_FMT_V210){
-        if((src->width % 12 != 0) || (dst->width % 12 != 0)){
+        if((srcWidth % 12 != 0) || (dstWidth % 12 != 0)){
             cerr << "[CUDA] Can not handle unaligned data!" << endl;
             return -1;
         }
-        if((src->height % 12 != 0) || (dst->height % 12 != 0)){
+        if((srcHeight % 12 != 0) || (dstHeight % 12 != 0)){
             cerr << "[CUDA] Can not handle unaligned data!" << endl;
             return -1;
         }
     }
 
     // Verify valid resize
-    if((src->width < dst->width && src->height > dst->height) ||
-        (src->width > dst->width && src->height < dst->height)){
+    if((srcWidth < dstWidth && srcHeight > dstHeight) ||
+        (srcWidth > dstWidth && srcHeight < dstHeight)){
         cerr << "[CUDA] Can not upscale in an orientation and downscale another!" << endl;
         return -1;
     }
@@ -450,8 +481,8 @@ int cuda_resample(AVFrame* src, AVFrame* dst, int operation){
     // Start counting operation execution time
     initTime = high_resolution_clock::now();
 
-    // Apply the scaling operation
-    cuda_resample_aux(src, dst, operation);
+    // Apply operation
+    cuda_resampleStarter(src, dst, operation, srcWidth, srcHeight, dstWidth, dstHeight, srcFormat, dstFormat, nTimes);
 
     // Stop counting operation execution time
     stopTime = high_resolution_clock::now();

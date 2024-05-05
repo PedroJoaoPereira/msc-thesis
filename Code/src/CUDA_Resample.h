@@ -22,6 +22,6 @@ using namespace std;
 using namespace std::chrono;
 
 // Wrapper for the cuda resample operation method
-int cuda_resample(AVFrame* src, AVFrame* dst, int operation);
+int cuda_resample(AVFrame* src, AVFrame* dst, int operation, int nTimes);
 
 #endif
