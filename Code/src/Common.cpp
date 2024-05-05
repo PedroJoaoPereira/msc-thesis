@@ -56,11 +56,11 @@ int getPixelSupport(int operation, int scaleRatio){
         case SWS_POINT:
             return 2;
         case SWS_BILINEAR:
-            return 2 * scaleRatio;
+            return 2 * 1;
         case SWS_BICUBIC:
-            return 4 * scaleRatio;
+            return 4 * 1;
         case SWS_LANCZOS:
-            return 6 * scaleRatio;
+            return 6 * 1;
     }
 
     // Insuccess
