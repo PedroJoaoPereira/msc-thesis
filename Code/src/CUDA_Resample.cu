@@ -287,9 +287,6 @@ __global__ void cubicScaleV(const int srcWidth, const int srcHeight, const int d
         cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin + 2), tex2D(texV, pixCol, pixLin + 2), tex2D(texV, pixCol + 1, pixLin + 2), tex2D(texV, pixCol + 2, pixLin + 2)))));
 }
 
-
-#define USE_TIME 1
-
 // Prepares the resample operation
 void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation,
     int srcWidth, int srcHeight, int dstWidth, int dstHeight,
