@@ -579,16 +579,16 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
     bool isDownScale = sizeRatio < static_cast<PrecisionType>(1.);
     int pixelSupportDiv2 = pixelSupport / 2;
     PrecisionType filterStep = static_cast<PrecisionType>(1.);
-    if(isDownScale && operation != SWS_POINT){
+    if (isDownScale && operation != SWS_POINT) {
         filterStep = 1. / (ceil((pixelSupport / 2.) / sizeRatio) / (pixelSupport / 2.));
     }
-    
+
     // Calculate number of lines of coefficients
     int preCalcCoefSize = lcm(srcSize, dstSize) / min<int>(srcSize, dstSize);
 
     // Initialize 2d array
     preCalculatedCoefs = static_cast<PrecisionType**>(malloc(preCalcCoefSize * sizeof(PrecisionType*)));
-    for(int index = 0; index < preCalcCoefSize; index++)
+    for (int index = 0; index < preCalcCoefSize; index++)
         preCalculatedCoefs[index] = static_cast<PrecisionType*>(malloc(pixelSupport * sizeof(PrecisionType)));
 
     // For each necessary line of coefficients
@@ -596,22 +596,26 @@ int sequential_preCalculateCoefficients(int srcSize, int dstSize, int operation,
         // Original line index coordinate
         PrecisionType linOriginal = (static_cast<PrecisionType>(lin) + static_cast<PrecisionType>(0.5)) / sizeRatio - static_cast<PrecisionType>(0.5);
         // Calculate nearest original position
-        int linNearest = floor(linOriginal);
+        int linUpper = floor(linOriginal);
+        int linBottom = ceil(linOriginal);
 
-        // Calculate distance to left nearest pixel
-        PrecisionType dist = linOriginal - static_cast<PrecisionType>(linNearest);
         // Calculate distance to original pixels
-        PrecisionType upperCoef = dist;
-        PrecisionType bottomtCoef = static_cast<PrecisionType>(1.) - dist;
+        PrecisionType upperCoef = linOriginal - static_cast<PrecisionType>(linUpper);
+        PrecisionType bottomtCoef = static_cast<PrecisionType>(linBottom) - linOriginal;
 
         // Calculate coefficients
         for (int index = 0; index < pixelSupportDiv2; index++) {
-            preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = coefFunc((upperCoef + index) * filterStep);
-            preCalculatedCoefs[lin][index + pixelSupportDiv2] = coefFunc((bottomtCoef + index) * filterStep);
+            preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = coefFunc(upperCoef * filterStep + index / filterStep);
+            preCalculatedCoefs[lin][index + pixelSupportDiv2] = coefFunc(bottomtCoef * filterStep + index / filterStep);
 
-            if(sizeRatio < static_cast<PrecisionType>(1.) && operation == SWS_POINT)
-                if(preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] == preCalculatedCoefs[lin][index + pixelSupportDiv2])
+            if (sizeRatio < static_cast<PrecisionType>(1.) && operation == SWS_POINT)
+                if (preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] == preCalculatedCoefs[lin][index + pixelSupportDiv2])
                     preCalculatedCoefs[lin][index + pixelSupportDiv2] = static_cast<PrecisionType>(1.);
+
+            cout << endl << "coef" << endl;
+            for (int i = 0; i < pixelSupport; i++) {
+                cout << preCalculatedCoefs[lin][i] << endl;
+            }
         }
     }
 
