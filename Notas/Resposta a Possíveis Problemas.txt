@@ -1,9 +1,10 @@
-Porque não utilizar a ferramenta FFMPEG / Libav com a biblioteca HWAccel?
+- Porque não utilizar a ferramenta FFMPEG / Libav com a biblioteca HWAccel?
 Esta biblioteca utiliza um hardware based codec da NVidia, NVenc.
-Torna impossível a utilização desta biblioteca neste projecto porque, tendo em conta
-o objectivo final, a integração da ferramenta numa aplicação de processamento de vídeo
-em tempo real. O re-encoding do vídeo com o único objectivo da utilização dos métodos
-da biblioteca enunciada tem um custo elevado em questões de tempo de execução que,
-adicionado ao tempo de execução dos métodos em si acaba por não compensar a sua utilização.
-A implementação das funções necessárias recorrendo aos potenciais do GPU e respeitando o
-codec em que o vídeo se encontra é uma solução muito mais óptima para o problema.
+Este projecto tem como objectivo a implementação das fases de resampling e resizing de
+frames de um vídeo descomprimido, sem qualquer tipo de encoding. Para utilizar as funcionalidades
+da ferramenta FFMPEG com aceleração de hardware mencionada implicava que o vídeo a ser
+processado tivesse com o encoding da NVidia, o encoding NVenc.
+Adicionalmente, a fase de resampling e resizing serão realizadas antes de qualquer tipo
+de compressão e daí esta ferramenta não se aplica / substitui o desenvolvimento deste projecto.
+
+---------------------------------------------------------------------
