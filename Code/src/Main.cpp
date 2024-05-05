@@ -98,15 +98,15 @@ int main(){
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_UYVY422));
 
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 960, 540, AV_PIX_FMT_YUV422P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
     scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
 
     // Create scaling operations
     vector<int> scaleOperations = vector<int>();
     //scaleOperations.push_back(SWS_POINT);
-    scaleOperations.push_back(SWS_BILINEAR);
+    //scaleOperations.push_back(SWS_BILINEAR);
     //scaleOperations.push_back(SWS_BICUBIC);
-    //scaleOperations.push_back(SWS_LANCZOS);
+    scaleOperations.push_back(SWS_LANCZOS);
 
     // Test procedures
     testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, scaleInImgs, scaleOutImgs, scaleOperations, nTimes);
