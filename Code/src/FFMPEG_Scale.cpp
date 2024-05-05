@@ -1,14 +1,14 @@
 #include "FFMPEG_Scale.h"
 
-int ffmpeg_scale(ImageInfo src, ImageInfo dst, int operation){
+int ffmpeg_scale(AVFrame* srcFrame, AVFrame* dstFrame, int operation){
     // Variables used
     int duration = -1;
     SwsContext* swsContext;
     high_resolution_clock::time_point initTime, stopTime;
 
     // Create operation context
-    swsContext = sws_getContext(src.width, src.height, src.pixelFormat,
-                                dst.width, dst.height, dst.pixelFormat,
+    swsContext = sws_getContext(srcFrame->width, srcFrame->height, (AVPixelFormat) srcFrame->format,
+                                dstFrame->width, dstFrame->height, (AVPixelFormat) dstFrame->format,
                                 operation, NULL, NULL, NULL);
 
     // Verify if scaling context was created
@@ -21,7 +21,7 @@ int ffmpeg_scale(ImageInfo src, ImageInfo dst, int operation){
     initTime = high_resolution_clock::now();
 
     // Apply the scaling operation
-    if(sws_scale(swsContext, src.frame->data, src.frame->linesize, 0, src.height, dst.frame->data, dst.frame->linesize) < 0){
+    if(sws_scale(swsContext, srcFrame->data, srcFrame->linesize, 0, srcFrame->height, dstFrame->data, dstFrame->linesize) < 0){
         // Free used resources
         sws_freeContext(swsContext);
 
@@ -33,7 +33,7 @@ int ffmpeg_scale(ImageInfo src, ImageInfo dst, int operation){
     stopTime = high_resolution_clock::now();
 
     // Calculate the execution time
-    duration = duration_cast<milliseconds>(stopTime - initTime).count();
+    duration = duration_cast<microseconds>(stopTime - initTime).count();
 
     // Free used resources
     sws_freeContext(swsContext);

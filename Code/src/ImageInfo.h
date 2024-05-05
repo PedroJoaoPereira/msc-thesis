@@ -2,6 +2,7 @@
 #define IMAGE_INFO_H
 
 #include <string>
+
 #include "Common.h"
 
 extern "C"{
@@ -23,15 +24,13 @@ class ImageInfo{
 
     // Constructor
     ImageInfo(string fileName, int width, int height, AVPixelFormat pixelFormat);
-    // Destructor
-    ~ImageInfo();
 
     // Load image into avframe
-    int loadImage();
+    void loadImage();
     // Create frame
-    int initFrame();
+    void initFrame();
     // Write image into a file
-    int writeImage();
+    void writeImage();
 };
 
 #endif
