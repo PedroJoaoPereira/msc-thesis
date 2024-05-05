@@ -40,9 +40,10 @@ int main(){
 
     // Import all images into a vector
     vector<ImageInfo*> inImgs = vector<ImageInfo*>();
+    //inImgs.push_back(img_obj_yuv444p_40x40);
+    inImgs.push_back(img_yuv444p_1920x1080);
     //inImgs.push_back(img_rgb24_1920x1080);
     //inImgs.push_back(img_gbrp_1920x1080);
-    inImgs.push_back(img_yuv444p_1920x1080);
     //inImgs.push_back(img_yuv422p_1920x1080);
     //inImgs.push_back(img_yuv420p_1920x1080);
     //inImgs.push_back(img_uyvy422_1920x1080);
@@ -54,12 +55,12 @@ int main(){
 
     // Create output images
     vector<ImageInfo*> outImgs = vector<ImageInfo*>();
-    //outImgs.push_back(new ImageInfo("imgs/results/", 1280, 720, AV_PIX_FMT_YUV444P));
+    //outImgs.push_back(new ImageInfo("imgs/results/", 70, 70, AV_PIX_FMT_YUV444P));
     outImgs.push_back(new ImageInfo("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV444P));
 
     // create operations
     vector<int> operations = vector<int>();
-    operations.push_back(SWS_BILINEAR);
+    //operations.push_back(SWS_BILINEAR);
     operations.push_back(SWS_BICUBIC);
 
     // Debug variables
@@ -68,7 +69,7 @@ int main(){
     bool isTestSequential = false;
     bool isTestOpenMP = false;
 
-    int nTimes = 3;
+    int nTimes = 5;
 
     // Test procedures
     testAll(isTestFFMPEG, isTestSimulator, isTestSequential, isTestOpenMP, inImgs, outImgs, operations, nTimes);

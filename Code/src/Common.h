@@ -20,6 +20,16 @@ bool isSupportedOperation(int operation);
 // Return if format is supported
 bool isSupportedFormat(AVPixelFormat format);
 
+// int num1 - integer value
+// int num2 - integer value
+// Return least common multiple of two integers
+int lcm(int num1, int num2);
+
+// int num1 - integer value
+// int num2 - integer value
+// Return minimum number of two integers
+int min(int num1, int num2);
+
 // AVPixelFormat inFormat	- pixel format of the source data
 // Return the temporary scale pixel format
 AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat);

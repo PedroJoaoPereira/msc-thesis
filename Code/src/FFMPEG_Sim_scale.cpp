@@ -2,7 +2,7 @@
 
 // Modify the color model of the image
 template <class PrecisionType>
-int ffmpeg_sim_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
+int resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
                          int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]){
 
     // If same formats no need to resample
@@ -86,29 +86,91 @@ int ffmpeg_sim_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
     return -1;
 }
 
+// Precalculate coefficients
+template <class PrecisionType>
+int preCalculateCoefficients(int srcSize, int dstSize, int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs){
+    // Calculate number of lines of coefficients
+    int numLinsPreCalcCoef = lcm(srcSize, dstSize) / min(srcSize, dstSize);
+
+    // Initialize 2d array
+    preCalculatedCoefs = static_cast<PrecisionType**>(malloc(numLinsPreCalcCoef * sizeof(PrecisionType*)));
+    for(int index = 0; index < numLinsPreCalcCoef; index++)
+        preCalculatedCoefs[index] = static_cast<PrecisionType*>(malloc(pixelSupport * sizeof(PrecisionType)));
+
+    // Calculate size ratio
+    PrecisionType sizeRatio = static_cast<PrecisionType>(dstSize) / static_cast<PrecisionType>(srcSize);
+    // Calculate once
+    int pixelSupportDiv2 = pixelSupport / 2;
+    // For each necessary line of coefficients
+    for(int lin = 0; lin < numLinsPreCalcCoef; lin++){
+        // Original line index coordinate
+        PrecisionType linOriginal = (static_cast<PrecisionType>(lin) + static_cast<PrecisionType>(0.5)) / sizeRatio - static_cast<PrecisionType>(0.5);
+        // Calculate nearest original position
+        int linNearest = floor(linOriginal);
+
+        // Calculate distance to left nearest pixel
+        PrecisionType dist = linOriginal - static_cast<PrecisionType>(linNearest);
+        // Calculate distance to original pixels
+        PrecisionType upperCoef = dist;
+        PrecisionType bottomtCoef = static_cast<PrecisionType>(1.) - dist;
+
+        // Calculate coefficients
+        for(int index = 0; index < pixelSupportDiv2; index++){
+            preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = coefFunc(upperCoef + index * sizeRatio);
+            preCalculatedCoefs[lin][index + pixelSupportDiv2] = coefFunc(bottomtCoef + index * sizeRatio);
+        }
+    }
+
+    // Success
+    return numLinsPreCalcCoef;
+}
+
 // Apply resizing operation
 template <class PrecisionType>
-void ffmpeg_sim_resize_operation(int srcWidth, int srcHeight, uint8_t* srcData,
-                                 int dstWidth, int dstHeight, uint8_t* dstData,
-                                 int pixelSupport, PrecisionType(*coefFunc)(PrecisionType)){
+void resize(int srcWidth, int srcHeight, uint8_t* srcData,
+           int dstWidth, int dstHeight, uint8_t* dstData, int operation){
+
+    // Variables needed
+    int pixelSupport = 0;
+    PrecisionType(*coefFunc)(PrecisionType) = nullptr;
+
+    // Resize operation with different kernels
+    if(operation == SWS_POINT){
+        pixelSupport = 2;
+        coefFunc = &NearestNeighborCoefficient<PrecisionType>;
+    }
+    if(operation == SWS_BILINEAR){
+        pixelSupport = 2;
+        coefFunc = &BilinearCoefficient<PrecisionType>;
+    }
+    if(operation == SWS_BICUBIC){
+        pixelSupport = 4;
+        coefFunc = &MitchellCoefficient<PrecisionType>;
+    }
+
+    // Calculate once
+    int pixelSupportDiv2 = pixelSupport / 2;
 
     // Get scale ratios
     PrecisionType scaleHeightRatio = static_cast<PrecisionType>(dstHeight) / static_cast<PrecisionType>(srcHeight);
     PrecisionType scaleWidthRatio = static_cast<PrecisionType>(dstWidth) / static_cast<PrecisionType>(srcWidth);
 
-    // Calculate filter step in original data
-    PrecisionType vFilterStep = scaleHeightRatio;
-    PrecisionType hFilterStep = scaleWidthRatio;
-    
-    // Holds coefficients
-    PrecisionType* vCoefficients = (PrecisionType*) malloc(pixelSupport * sizeof(PrecisionType));
-    PrecisionType* hCoefficients = (PrecisionType*) malloc(pixelSupport * sizeof(PrecisionType));
+    // Create variables for precalculated coefficients
+    PrecisionType** vCoefs;
+    int vCoefsSize = preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, pixelSupport, coefFunc, vCoefs);
+    PrecisionType** hCoefs;
+    int hCoefsSize = preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, pixelSupport, coefFunc, hCoefs);
 
-    // Calculate once
-    int pixelSupportDiv2 = pixelSupport / 2;
-
+    // Temporary line index to coefficients
+    int indexLinCoef = -1;
     // Iterate through each line of the scaled image
     for(int lin = 0; lin < dstHeight; lin++){
+        // Increment temporary variable
+        indexLinCoef++;
+        // Reset temporary variable
+        if(indexLinCoef >= vCoefsSize)
+            indexLinCoef = 0;
+
         // Calculate once the target line coordinate
         int targetLine = lin * dstWidth;
 
@@ -121,20 +183,16 @@ void ffmpeg_sim_resize_operation(int srcWidth, int srcHeight, uint8_t* srcData,
         int linStart = linNearest - pixelSupportDiv2 + 1;
         int linStop = linStart + pixelSupport - 1;
 
-        // Calculate distance to left nearest pixel
-        PrecisionType vDist = linOriginal - static_cast<PrecisionType>(linNearest);
-        // Calculate distance to original pixels
-        PrecisionType vUpperCoef = vDist;
-        PrecisionType vBottomtCoef = static_cast<PrecisionType>(1.) - vDist;
-
-        // Calculate coefficients
-        for(int index = 0; index < pixelSupportDiv2; index++){
-            vCoefficients[pixelSupportDiv2 - index - 1] = coefFunc(vUpperCoef + index * vFilterStep);
-            vCoefficients[index + pixelSupportDiv2] = coefFunc(vBottomtCoef + index * vFilterStep);
-        }
-
+        // Temporary column index to coefficients
+        int indexColCoef = -1;
         // Iterate through each column of the scaled image
         for(int col = 0; col < dstWidth; col++){
+            // Increment temporary variable
+            indexColCoef++;
+            // Reset temporary variable
+            if(indexColCoef >= hCoefsSize)
+                indexColCoef = 0;
+
             // Original column index coordinate
             PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(0.5)) / scaleWidthRatio - static_cast<PrecisionType>(0.5);
 
@@ -144,29 +202,17 @@ void ffmpeg_sim_resize_operation(int srcWidth, int srcHeight, uint8_t* srcData,
             int colStart = colNearest - pixelSupportDiv2 + 1;
             int colStop = colStart + pixelSupport - 1;
 
-            // Calculate distance to left nearest pixel
-            PrecisionType hDist = colOriginal - static_cast<PrecisionType>(colNearest);
-            // Calculate distance to original pixels
-            PrecisionType hLeftCoef = hDist;
-            PrecisionType hRightCoef = static_cast<PrecisionType>(1.) - hDist;
-
-            // Calculate coefficients
-            for(int index = 0; index < pixelSupportDiv2; index++){
-                hCoefficients[pixelSupportDiv2 - index - 1] = coefFunc(hLeftCoef + index * hFilterStep);
-                hCoefficients[index + pixelSupportDiv2] = coefFunc(hRightCoef + index * hFilterStep);
-            }
-
             // Temporary variables used in the interpolation
             PrecisionType colorAcc = static_cast<PrecisionType>(0.);
             PrecisionType weightAcc = static_cast<PrecisionType>(0.);
             // Calculate resulting color from coefficients
             for(int linTemp = linStart; linTemp <= linStop; linTemp++){
                 // Access once the memory
-                PrecisionType vCoef = vCoefficients[linTemp - linStart];
+                PrecisionType vCoef = vCoefs[indexLinCoef][linTemp - linStart];
 
                 for(int colTemp = colStart; colTemp <= colStop; colTemp++){
                     // Access once the memory
-                    PrecisionType hCoef = hCoefficients[colTemp - colStart];
+                    PrecisionType hCoef = hCoefs[indexColCoef][colTemp - colStart];
 
                     // Get pixel from source data
                     uint8_t colorHolder = getPixel(linTemp, colTemp, srcWidth, srcHeight, srcData);
@@ -190,23 +236,9 @@ void ffmpeg_sim_resize_operation(int srcWidth, int srcHeight, uint8_t* srcData,
     }
 }
 
-// Prepare resizing operation
-template <class PrecisionType>
-void ffmpeg_sim_resize(int srcWidth, int srcHeight, uint8_t* srcData,
-                       int dstWidth, int dstHeight, uint8_t* dstData, int operation){
-
-    // Resize operation with different kernels
-    if(operation == SWS_POINT)
-        ffmpeg_sim_resize_operation<PrecisionType>(srcWidth, srcHeight, srcData, dstWidth, dstHeight, dstData, 2, NearestNeighborCoefficient<PrecisionType>);
-    if(operation == SWS_BILINEAR)
-        ffmpeg_sim_resize_operation<PrecisionType>(srcWidth, srcHeight, srcData, dstWidth, dstHeight, dstData, 2, BilinearCoefficient<PrecisionType>);
-    if(operation == SWS_BICUBIC)
-        ffmpeg_sim_resize_operation<PrecisionType>(srcWidth, srcHeight, srcData, dstWidth, dstHeight, dstData, 4, MitchellCoefficient<PrecisionType>);
-}
-
 // Prepares the scaling operation
 template <class PrecisionType>
-int ffmpeg_sim_scale_aux(AVFrame* src, AVFrame* dst, int operation){
+int scale(AVFrame* src, AVFrame* dst, int operation){
 
     // Access once
     int srcWidth = src->width, srcHeight = src->height;
@@ -260,7 +292,7 @@ int ffmpeg_sim_scale_aux(AVFrame* src, AVFrame* dst, int operation){
     // Verify if is not only a resample operation
     if(!isOnlyResample){
         // Resamples image to a supported format
-        if(ffmpeg_sim_resampler<PrecisionType>(srcWidth, srcHeight, srcFormat, src->data, src->linesize,
+        if(resampler<PrecisionType>(srcWidth, srcHeight, srcFormat, src->data, src->linesize,
                                                          srcWidth, srcHeight, scalingSupportedFormat, resampleFrame->data, resampleFrame->linesize) < 0){
             av_frame_free(&resampleFrame);
             av_frame_free(&scaleFrame);
@@ -271,8 +303,8 @@ int ffmpeg_sim_scale_aux(AVFrame* src, AVFrame* dst, int operation){
 
         // Apply the resizing operation to each color channel
         for(int colorChannel = 0; colorChannel < 3; colorChannel++){
-            ffmpeg_sim_resize<PrecisionType>(srcWidth, srcHeight, resampleFrame->data[colorChannel],
-                                             dstWidth, dstHeight, scaleFrame->data[colorChannel], operation);
+            resize<PrecisionType>(srcWidth, srcHeight, resampleFrame->data[colorChannel],
+                                  dstWidth, dstHeight, scaleFrame->data[colorChannel], operation);
         }
 
         // Assign correct values to apply last resample
@@ -283,7 +315,7 @@ int ffmpeg_sim_scale_aux(AVFrame* src, AVFrame* dst, int operation){
 
 #pragma region LAST RESAMPLE
     // Last resample to destination frame
-    if(ffmpeg_sim_resampler<PrecisionType>(dstWidth, dstHeight, lastResamplePixelFormat, lastResampleFrame->data, lastResampleFrame->linesize,
+    if(resampler<PrecisionType>(dstWidth, dstHeight, lastResamplePixelFormat, lastResampleFrame->data, lastResampleFrame->linesize,
                                                      dstWidth, dstHeight, dstFormat, dst->data, dst->linesize) < 0){
         if(!isOnlyResample){
             av_frame_free(&resampleFrame);
@@ -342,7 +374,7 @@ int ffmpeg_sim_scale(AVFrame* src, AVFrame* dst, int operation){
     initTime = high_resolution_clock::now();
 
     // Apply the scaling operation
-    if(int retVal = ffmpeg_sim_scale_aux<double>(src, dst, operation) < 0){
+    if(int retVal = scale<double>(src, dst, operation) < 0){
         string error = "[SIMULATOR] Operation could not be done (";
 
         if(retVal == -1)
