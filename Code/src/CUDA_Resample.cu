@@ -7,34 +7,29 @@ void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height
 
     // Calculate once
     int wxh = width * height;
-    int wxhDi2 = wxh / 2;
-    int wxhDi4 = wxh / 4;
+    int wxhDiv2 = wxh / 2;
+    int wxhDiv4 = wxh / 4;
 
     // Calculate buffer sizes for each pixel format
     switch(pixelFormat){
-    case AV_PIX_FMT_YUV444P:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxh;
-        bufferSize[2] = wxh;
-        break;
-    case AV_PIX_FMT_YUV422P:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi2;
-        bufferSize[2] = wxhDi2;
-        break;
-    case AV_PIX_FMT_YUV420P:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi4;
-        bufferSize[2] = wxhDi4;
-        break;
     case AV_PIX_FMT_UYVY422:
         bufferSize[0] = wxh * 2;
         bufferSize[1] = 0;
         bufferSize[2] = 0;
         break;
+    case AV_PIX_FMT_YUV422P:
+        bufferSize[0] = wxh;
+        bufferSize[1] = wxhDiv2;
+        bufferSize[2] = wxhDiv2;
+        break;
+    case AV_PIX_FMT_YUV420P:
+        bufferSize[0] = wxh;
+        bufferSize[1] = wxhDiv4;
+        bufferSize[2] = wxhDiv4;
+        break;
     case AV_PIX_FMT_NV12:
         bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi2;
+        bufferSize[1] = wxhDiv2;
         bufferSize[2] = 0;
         break;
     case AV_PIX_FMT_V210:
@@ -44,8 +39,8 @@ void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height
         break;
     case AV_PIX_FMT_YUV422PNORM:
         bufferSize[0] = wxh;
-        bufferSize[1] = wxhDi2;
-        bufferSize[2] = wxhDi2;
+        bufferSize[1] = wxhDiv2;
+        bufferSize[2] = wxhDiv2;
         break;
     }
 
@@ -85,13 +80,13 @@ void cudaCopyBuffersToGPU(uint8_t* srcBuffer[], uint8_t* gpuBuffer[], int* &buff
 // Copy data from device to host
 void cudaCopyBuffersFromGPU(uint8_t* targetBuffer[], uint8_t* gpuBuffer[], int* &bufferSize){
     // First channel
-    cudaMemcpy(targetBuffer[0], gpuBuffer[0], bufferSize[0], cudaMemcpyDeviceToHost);
+    cudaMemcpyAsync(targetBuffer[0], gpuBuffer[0], bufferSize[0], cudaMemcpyDeviceToHost);
 
     // Copy chroma channels if they exist
     if(bufferSize[1] != 0)
-        cudaMemcpy(targetBuffer[1], gpuBuffer[1], bufferSize[1], cudaMemcpyDeviceToHost);
+        cudaMemcpyAsync(targetBuffer[1], gpuBuffer[1], bufferSize[1], cudaMemcpyDeviceToHost);
     if(bufferSize[2] != 0)
-        cudaMemcpy(targetBuffer[2], gpuBuffer[2], bufferSize[2], cudaMemcpyDeviceToHost);
+        cudaMemcpyAsync(targetBuffer[2], gpuBuffer[2], bufferSize[2], cudaMemcpyDeviceToHost);
 }
 
 // Calculate launch parameters of format conversion kernel
@@ -174,16 +169,34 @@ pair<dim3, dim3> calculateConversionLP(int width, int height, int srcPixelFormat
     return result;
 }
 
+// Calculate launch parameters of resize kernel
+pair<dim3, dim3> calculateResizeLP(int width, int height){
+    // Variable with result launch parameters
+    pair<dim3, dim3> result;
+
+    // Dimensions are always the same because only deal with planar formats
+    result.first = dim3(width, height);
+
+    // Calculate thread size
+    int hDivisor = greatestDivisor(result.first.x, 16);
+    int vDivisor = greatestDivisor(result.first.y, 16);
+
+    // Assign thread size
+    result.second = dim3(hDivisor, vDivisor);
+
+    // Calculate block size
+    result.first.x /= hDivisor;
+    result.first.y /= vDivisor;
+
+    return result;
+}
+
 // ------------------------------------------------------------------
 
 // Convert the pixel format of the image
 __global__ void cuda_formatConversion(int width, int height,
     int srcPixelFormat, uint8_t* srcSlice0, uint8_t* srcSlice1, uint8_t* srcSlice2,
     int dstPixelFormat, uint8_t* dstSlice0, uint8_t* dstSlice1, uint8_t* dstSlice2){
-
-    // LEGACY DEBUG
-    uint8_t** srcSlice;
-    uint8_t** dstSlice;
 
     // Calculate pixel location
     int lin = blockIdx.y * blockDim.y + threadIdx.y;
@@ -426,8 +439,8 @@ __global__ void cuda_formatConversion(int width, int height,
         uint8_t vb = *srcVb++; // V1
 
         // Assign values
-        *dstU++ = uint8_t(llround((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
-        *dstV++ = uint8_t(llround((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
+        *dstU++ = uint8_t(lroundf((static_cast<float>(u) + static_cast<float>(ub)) / 2.f));
+        *dstV++ = uint8_t(lroundf((static_cast<float>(v) + static_cast<float>(vb)) / 2.f));
 
         return;
     }
@@ -465,8 +478,8 @@ __global__ void cuda_formatConversion(int width, int height,
         uint8_t vb = *srcVb++; // V1
 
         // Assign values
-        *dstC++ = uint8_t(llround((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
-        *dstC++ = uint8_t(llround((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(u) + static_cast<float>(ub)) / 2.f));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(v) + static_cast<float>(vb)) / 2.f));
 
         return;
     }
@@ -1052,13 +1065,13 @@ __global__ void cuda_formatConversion(int width, int height,
         *dstBb++ = y5b;
 
         // Assign chroma values
-        *dstU++ = uint8_t(llround((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
-        *dstU++ = uint8_t(llround((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
-        *dstU++ = uint8_t(llround((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
+        *dstU++ = uint8_t(lroundf((static_cast<float>(u0) + static_cast<float>(u0b)) / 2.f));
+        *dstU++ = uint8_t(lroundf((static_cast<float>(u1) + static_cast<float>(u1b)) / 2.f));
+        *dstU++ = uint8_t(lroundf((static_cast<float>(u2) + static_cast<float>(u2b)) / 2.f));
 
-        *dstV++ = uint8_t(llround((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
-        *dstV++ = uint8_t(llround((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
-        *dstV++ = uint8_t(llround((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+        *dstV++ = uint8_t(lroundf((static_cast<float>(v0) + static_cast<float>(v0b)) / 2.f));
+        *dstV++ = uint8_t(lroundf((static_cast<float>(v1) + static_cast<float>(v1b)) / 2.f));
+        *dstV++ = uint8_t(lroundf((static_cast<float>(v2) + static_cast<float>(v2b)) / 2.f));
 
         return;
     }
@@ -1136,12 +1149,12 @@ __global__ void cuda_formatConversion(int width, int height,
         *dstBb++ = y5b;
 
         // Assign chroma values
-        *dstC++ = uint8_t(llround((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
-        *dstC++ = uint8_t(llround((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
-        *dstC++ = uint8_t(llround((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
-        *dstC++ = uint8_t(llround((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
-        *dstC++ = uint8_t(llround((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
-        *dstC++ = uint8_t(llround((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(u0) + static_cast<float>(u0b)) / 2.f));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(v0) + static_cast<float>(v0b)) / 2.f));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(u1) + static_cast<float>(u1b)) / 2.f));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(v1) + static_cast<float>(v1b)) / 2.f));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(u2) + static_cast<float>(u2b)) / 2.f));
+        *dstC++ = uint8_t(lroundf((static_cast<float>(v2) + static_cast<float>(v2b)) / 2.f));
 
         return;
     }
@@ -1176,9 +1189,9 @@ __global__ void cuda_formatConversion(int width, int height,
         auto dstV = dstSlice2 + lin * hStrideYUV422P / 2 + col * 3;
 
         // Create const for normalization
-        double constLuma = 219. / 1023.;
-        double constChroma = 224. / 1023.;
-        double const16 = 16.;
+        float constLuma = 219.f / 1023.f;
+        float constChroma = 224.f / 1023.f;
+        float const16 = 16.f;
 
         // Assign values
         auto u0 = *srcB & 0x3FF; // U0
@@ -1201,20 +1214,20 @@ __global__ void cuda_formatConversion(int width, int height,
         auto y5 = (*srcB >> 20U) & 0x3FF; // Y5
         *srcB++;
 
-        *dstU++ = uint8_t(llround(static_cast<double>(u0) * constChroma + const16));
-        *dstB++ = uint8_t(llround(static_cast<double>(y0) * constLuma + const16));
-        *dstV++ = uint8_t(llround(static_cast<double>(v0) * constChroma + const16));
-        *dstB++ = uint8_t(llround(static_cast<double>(y1) * constLuma + const16));
+        *dstU++ = uint8_t(lroundf(static_cast<float>(u0) * constChroma + const16));
+        *dstB++ = uint8_t(lroundf(static_cast<float>(y0) * constLuma + const16));
+        *dstV++ = uint8_t(lroundf(static_cast<float>(v0) * constChroma + const16));
+        *dstB++ = uint8_t(lroundf(static_cast<float>(y1) * constLuma + const16));
 
-        *dstU++ = uint8_t(llround(static_cast<double>(u1) * constChroma + const16));
-        *dstB++ = uint8_t(llround(static_cast<double>(y2) * constLuma + const16));
-        *dstV++ = uint8_t(llround(static_cast<double>(v1) * constChroma + const16));
-        *dstB++ = uint8_t(llround(static_cast<double>(y3) * constLuma + const16));
+        *dstU++ = uint8_t(lroundf(static_cast<float>(u1) * constChroma + const16));
+        *dstB++ = uint8_t(lroundf(static_cast<float>(y2) * constLuma + const16));
+        *dstV++ = uint8_t(lroundf(static_cast<float>(v1) * constChroma + const16));
+        *dstB++ = uint8_t(lroundf(static_cast<float>(y3) * constLuma + const16));
 
-        *dstU++ = uint8_t(llround(static_cast<double>(u2) * constChroma + const16));
-        *dstB++ = uint8_t(llround(static_cast<double>(y4) * constLuma + const16));
-        *dstV++ = uint8_t(llround(static_cast<double>(v2) * constChroma + const16));
-        *dstB++ = uint8_t(llround(static_cast<double>(y5) * constLuma + const16));
+        *dstU++ = uint8_t(lroundf(static_cast<float>(u2) * constChroma + const16));
+        *dstB++ = uint8_t(lroundf(static_cast<float>(y4) * constLuma + const16));
+        *dstV++ = uint8_t(lroundf(static_cast<float>(v2) * constChroma + const16));
+        *dstB++ = uint8_t(lroundf(static_cast<float>(y5) * constLuma + const16));
 
         return;
     }
@@ -1235,9 +1248,9 @@ __global__ void cuda_formatConversion(int width, int height,
         auto srcV = srcSlice2 + lin * hStrideYUV422P / 2 + col * 3;
 
         // Create const for normalization
-        double const16 = 16.;
-        double constLuma = 1023. / 219.;
-        double constChroma = 1023. / 224.;
+        float const16 = 16.f;
+        float constLuma = 1023.f / 219.f;
+        float constChroma = 1023.f / 224.f;
 
         // Get components from source
         auto u0n = *srcU++; // U0
@@ -1256,20 +1269,20 @@ __global__ void cuda_formatConversion(int width, int height,
         auto y5n = *srcB++; // Y5
 
         // Denormalize values
-        auto v0 = uint16_t(llround((static_cast<double>(v0n) - const16) * constChroma)) & 0x3FF;
-        auto y0 = uint16_t(llround((static_cast<double>(y0n) - const16) * constLuma)) & 0x3FF;
-        auto u0 = uint16_t(llround((static_cast<double>(u0n) - const16) * constChroma)) & 0x3FF;
-        auto y2 = uint16_t(llround((static_cast<double>(y2n) - const16) * constLuma)) & 0x3FF;
+        auto v0 = uint16_t(lroundf((static_cast<float>(v0n) - const16) * constChroma)) & 0x3FF;
+        auto y0 = uint16_t(lroundf((static_cast<float>(y0n) - const16) * constLuma)) & 0x3FF;
+        auto u0 = uint16_t(lroundf((static_cast<float>(u0n) - const16) * constChroma)) & 0x3FF;
+        auto y2 = uint16_t(lroundf((static_cast<float>(y2n) - const16) * constLuma)) & 0x3FF;
 
-        auto u1 = uint16_t(llround((static_cast<double>(u1n) - const16) * constChroma)) & 0x3FF;
-        auto y1 = uint16_t(llround((static_cast<double>(y1n) - const16) * constLuma)) & 0x3FF;
-        auto u2 = uint16_t(llround((static_cast<double>(u2n) - const16) * constChroma)) & 0x3FF;
-        auto y3 = uint16_t(llround((static_cast<double>(y3n) - const16) * constLuma)) & 0x3FF;
+        auto u1 = uint16_t(lroundf((static_cast<float>(u1n) - const16) * constChroma)) & 0x3FF;
+        auto y1 = uint16_t(lroundf((static_cast<float>(y1n) - const16) * constLuma)) & 0x3FF;
+        auto u2 = uint16_t(lroundf((static_cast<float>(u2n) - const16) * constChroma)) & 0x3FF;
+        auto y3 = uint16_t(lroundf((static_cast<float>(y3n) - const16) * constLuma)) & 0x3FF;
 
-        auto v1 = uint16_t(llround((static_cast<double>(v1n) - const16) * constChroma)) & 0x3FF;
-        auto y5 = uint16_t(llround((static_cast<double>(y5n) - const16) * constLuma)) & 0x3FF;
-        auto v2 = uint16_t(llround((static_cast<double>(v2n) - const16) * constChroma)) & 0x3FF;
-        auto y4 = uint16_t(llround((static_cast<double>(y4n) - const16) * constLuma)) & 0x3FF;
+        auto v1 = uint16_t(lroundf((static_cast<float>(v1n) - const16) * constChroma)) & 0x3FF;
+        auto y5 = uint16_t(lroundf((static_cast<float>(y5n) - const16) * constLuma)) & 0x3FF;
+        auto v2 = uint16_t(lroundf((static_cast<float>(v2n) - const16) * constChroma)) & 0x3FF;
+        auto y4 = uint16_t(lroundf((static_cast<float>(y4n) - const16) * constLuma)) & 0x3FF;
 
         // Assign value
         *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
@@ -1283,15 +1296,15 @@ __global__ void cuda_formatConversion(int width, int height,
 }
 
 // Precalculate coefficients
-int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, double(*coefFunc)(double), double* &preCalculatedCoefs){
+int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, double(*coefFunc)(double), float* &preCalculatedCoefs){
     // Calculate size ratio
-    double sizeRatio = static_cast<double>(dstSize) / static_cast<double>(srcSize);
+    float sizeRatio = static_cast<float>(dstSize) / static_cast<float>(srcSize);
 
     // Calculate once
-    double pixelSupportDiv2 = pixelSupport / 2.;
-    bool isDownScale = sizeRatio < 1.;
-    double regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
-    double filterStep = isDownScale && operation != SWS_POINT ? 1. / sizeRatio : 1.;
+    float pixelSupportDiv2 = pixelSupport / 2.f;
+    bool isDownScale = sizeRatio < 1.f;
+    float regionRadius = isDownScale ? pixelSupportDiv2 / sizeRatio : pixelSupportDiv2;
+    float filterStep = isDownScale && operation != SWS_POINT ? 1.f / sizeRatio : 1.f;
     int numCoefficients = isDownScale ? ceil(pixelSupport / sizeRatio) : pixelSupport;
     int numCoefficientsDiv2 = numCoefficients / 2;
 
@@ -1299,7 +1312,7 @@ int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int p
     int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min(srcSize, dstSize);
 
     // Initialize array
-    preCalculatedCoefs = static_cast<double*>(malloc(preCalcCoefSize * numCoefficients * sizeof(double)));
+    preCalculatedCoefs = static_cast<float*>(malloc(preCalcCoefSize * numCoefficients * sizeof(float)));
 
     // For each necessary line of coefficients
     for(int col = 0; col < preCalcCoefSize; col++){
@@ -1307,23 +1320,23 @@ int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int p
         int indexOffset = col * numCoefficients;
 
         // Original line index coordinate
-        double colOriginal = (static_cast<double>(col) + .5) / sizeRatio;
+        float colOriginal = (static_cast<float>(col) + .5f) / sizeRatio;
 
         // Discover source limit pixels
-        double nearPixel = colOriginal - filterStep;
-        double leftPixel = colOriginal - regionRadius;
+        float nearPixel = colOriginal - filterStep;
+        float leftPixel = colOriginal - regionRadius;
 
         // Discover offset to pixel of filter start
-        double offset = round(leftPixel) + .5 - leftPixel;
+        float offset = round(leftPixel) + .5f - leftPixel;
         // Calculate maximum distance to normalize distances
-        double maxDistance = colOriginal - nearPixel;
+        float maxDistance = colOriginal - nearPixel;
         // Calculate where filtering will start
-        double startPosition = leftPixel + offset;
+        float startPosition = leftPixel + offset;
 
         // Calculate coefficients
-        double coefAcc = 0.;
+        float coefAcc = 0.f;
         for(int index = 0; index < numCoefficients; index++){
-            double coefHolder = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
+            float coefHolder = static_cast<float>(coefFunc((colOriginal - (startPosition + index)) / maxDistance));
             coefAcc += coefHolder;
             preCalculatedCoefs[indexOffset + index] = coefHolder;
         }
@@ -1332,12 +1345,12 @@ int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int p
         if(operation == SWS_POINT){
             if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == preCalculatedCoefs[indexOffset + numCoefficientsDiv2]){
                 if(isDownScale){
-                    if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == 0. && numCoefficients % 2 != 0)
-                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] = 1.;
+                    if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == 0.f && numCoefficients % 2 != 0)
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] = 1.f;
                     else
-                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.;
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.f;
                 } else
-                    preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.;
+                    preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = 1.f;
             }
         }
 
@@ -1352,89 +1365,90 @@ int cuda_preCalculateCoefficients(int srcSize, int dstSize, int operation, int p
 }
 
 // Change the image dimension
-void cuda_resize(int srcWidth, int srcHeight, uint8_t* srcData,
-    int dstWidth, int dstHeight, uint8_t* dstData,
-    int operation, int pixelSupport, int colorChannel,
-    int vCoefsSize, double* &vCoefs, int hCoefsSize, double* &hCoefs){
+__global__ void cuda_resize(int srcWidth, int srcHeight, int dstWidth, int dstHeight,
+    float scaleWidthRatio, float scaleHeightRatio, uint8_t* srcData, uint8_t* dstData, float regionHRadius, float regionVRadius, int colorChannel,
+    int vCoefsSize, int numVCoefs, float* vCoefs, int hCoefsSize, int numHCoefs, float* hCoefs){
 
-    // Get scale ratios
-    double scaleHeightRatio = static_cast<double>(dstHeight) / static_cast<double>(srcHeight);
-    double scaleWidthRatio = static_cast<double>(dstWidth) / static_cast<double>(srcWidth);
+    // Calculate pixel location
+    int lin = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Calculate once coefficients index
+    int linCoefOffset = (lin % vCoefsSize) * numVCoefs;
+    int colCoefOffset = (col % hCoefsSize) * numHCoefs;
+
+    // Original index coordinates
+    float linOriginal = (static_cast<float>(lin) + .5f) / scaleHeightRatio;
+    float colOriginal = (static_cast<float>(col) + .5f) / scaleWidthRatio;
+
+    // Discover source limit pixels
+    float upperPixel = linOriginal - regionVRadius;
+    float leftPixel = colOriginal - regionHRadius;
+
+    // Discover offset to pixel of filter start
+    float offsetV = roundf(upperPixel) + .5f - upperPixel;
+    float offsetH = roundf(leftPixel) + .5f - leftPixel;
 
     // Calculate once
-    double pixelSupportDiv2 = pixelSupport / 2.;
-    bool isDownScaleV = scaleHeightRatio < 1.;
-    bool isDownScaleH = scaleWidthRatio < 1.;
-    double regionVRadius = isDownScaleV ? pixelSupportDiv2 / scaleHeightRatio : pixelSupportDiv2;
-    double regionHRadius = isDownScaleH ? pixelSupportDiv2 / scaleWidthRatio : pixelSupportDiv2;
-    int numVCoefs = isDownScaleV ? ceil(pixelSupport / scaleHeightRatio) : pixelSupport;
-    int numHCoefs = isDownScaleH ? ceil(pixelSupport / scaleWidthRatio) : pixelSupport;
+    float startLinPosition = upperPixel + offsetV;
+    float startColPosition = leftPixel + offsetH;
 
-    // Iterate through each line of the scaled image
-    for(int lin = 0; lin < dstHeight; lin++){
-        // Calculate once the target line coordinate
-        int targetLine = lin * dstWidth;
-        // Calculate once the line index of coefficients
-        int indexLinOffset = (lin % vCoefsSize) * numVCoefs;
+    // Color accumulator
+    float acc = 0.f;
+    // Calculate resulting color from coefficients
+    for(int indexV = 0; indexV < numVCoefs; indexV++){
+        // Get vertical coefficient
+        float vCoef = vCoefs[linCoefOffset + indexV];
 
-        // Original line index coordinate
-        double linOriginal = (static_cast<double>(lin) + .5) / scaleHeightRatio;
-
-        // Discover source limit pixels
-        double upperPixel = linOriginal - regionVRadius;
-        // Discover offset to pixel of filter start
-        double offsetV = round(upperPixel) + .5 - upperPixel;
+        // Calculate source pixel line index
+        int srcLinIndex = startLinPosition + indexV;
+        // Clamp coords
+        if(srcLinIndex < 0)
+            srcLinIndex = 0;
+        else if(srcLinIndex > srcHeight - 1)
+            srcLinIndex = srcHeight - 1;
 
         // Calculate once
-        double startLinPosition = upperPixel + offsetV;
+        int srcLinIndexOffset = srcLinIndex * srcWidth;
 
-        // Iterate through each column of the scaled image
-        for(int col = 0; col < dstWidth; col++){
-            // Calculate once the column index of coefficients
-            int indexColOffset = (col % hCoefsSize) * numHCoefs;
+        for(int indexH = 0; indexH < numHCoefs; indexH++){
+            // Get horizontal coefficient
+            float hCoef = hCoefs[colCoefOffset + indexH];
 
-            // Original line index coordinate
-            double colOriginal = (static_cast<double>(col) + .5) / scaleWidthRatio;
+            // Calculate source pixel column index
+            int srcColIndex = startColPosition + indexH;
+            // Clamp coords
+            if(srcColIndex < 0)
+                srcColIndex = 0;
+            else if(srcColIndex > srcWidth - 1)
+                srcColIndex = srcWidth - 1;
 
-            // Discover source limit pixels
-            double leftPixel = colOriginal - regionHRadius;
-            // Discover offset to pixel of filter start
-            double offsetH = round(leftPixel) + .5 - leftPixel;
+            // Get neighbor pixel color
+            uint8_t colorHolder = srcData[srcLinIndexOffset + srcColIndex];
 
-            // Calculate once
-            double startColPosition = leftPixel + offsetH;
+            // Calculate pixel color weight
+            float weight = vCoef * hCoef;
 
-            // Temporary variables used in the interpolation
-            double result = 0.;
-            // Calculate resulting color from coefficients
-            for(int indexV = 0; indexV < numVCoefs; indexV++){
-                // Access once the memory
-                double vCoef = vCoefs[indexLinOffset + indexV];
-
-                for(int indexH = 0; indexH < numHCoefs; indexH++){
-                    // Access once the memory
-                    double hCoef = hCoefs[indexColOffset + indexH];
-
-                    // Get pixel from source data
-                    uint8_t colorHolder = getPixel(startLinPosition + indexV, startColPosition + indexH, srcWidth, srcHeight, srcData);
-
-                    // Calculate pixel color weight
-                    double weight = vCoef * hCoef;
-
-                    // Weights neighboring pixel and add it to the result
-                    result += static_cast<double>(colorHolder) * weight;
-                }
-            }
-
-            // Clamp value to avoid undershooting and overshooting
-            if(colorChannel == 0)
-                clamp(result, 16., 235.);
-            else
-                clamp(result, 16., 240.);
-            // Assign calculated color to destiantion data
-            dstData[targetLine + col] = uint8_t(roundFast(result));
+            // Weighted color
+            acc += colorHolder * weight;
         }
     }
+
+    // Clamp value to avoid undershooting and overshooting
+    if(colorChannel == 0){
+        if(acc < 16.f)
+            acc = 16.f;
+        else if(acc > 235.f)
+            acc = 235.f;
+    } else{
+        if(acc < 16.f)
+            acc = 16.f;
+        else if(acc > 240.f)
+            acc = 240.f;
+    }
+
+    // Assign calculated color to destiantion data
+    dstData[lin * dstWidth + col] = uint8_t(lroundf(acc));
 }
 
 // Prepares the resample operation
@@ -1467,77 +1481,158 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         // Create launch parameters of format conversion kernel
         pair<dim3, dim3> formatConversionLP = calculateConversionLP(dstWidth, dstHeight, srcFormat, dstFormat);
         // Format conversion operation
-        cuda_formatConversion<< <formatConversionLP.first, formatConversionLP.second >> >(dstWidth, dstHeight,
+        cuda_formatConversion << <formatConversionLP.first, formatConversionLP.second >> > (dstWidth, dstHeight,
             srcFormat, sourcePointers[0], sourcePointers[1], sourcePointers[2],
             dstFormat, targetPointers[0], targetPointers[1], targetPointers[2]);
 
         // Copy resulting data from device
         cudaCopyBuffersFromGPU(dst->data, targetPointers, targetPointersSizes);
 
+        // Free used resources
+        freeCudaMemory(sourcePointers);
+        freeCudaMemory(targetPointers);
+        free(sourcePointersSizes);
+        free(targetPointersSizes);
+
         // End resample operation
         return;
     }
-    /*
+
     // Get standard supported pixel format in scaling
     int scaleFormat = getScaleFormat(srcFormat, dstFormat);
+
+    // Get scale ratios
+    float scaleHeightRatio = static_cast<float>(dstHeight) / static_cast<float>(srcHeight);
+    float scaleWidthRatio = static_cast<float>(dstWidth) / static_cast<float>(srcWidth);
 
     // Needed resources for coefficients calculations
     double(*coefFunc)(double) = getCoefMethod(operation);
     int pixelSupport = getPixelSupport(operation);
+
+    // Calculate once
+    float pixelSupportDiv2 = pixelSupport / 2.f;
+    bool isDownScaleV = scaleHeightRatio < 1.f;
+    bool isDownScaleH = scaleWidthRatio < 1.f;
+    float regionVRadius = isDownScaleV ? pixelSupportDiv2 / scaleHeightRatio : pixelSupportDiv2;
+    float regionHRadius = isDownScaleH ? pixelSupportDiv2 / scaleWidthRatio : pixelSupportDiv2;
+    int numVCoefs = isDownScaleV ? ceil(pixelSupport / scaleHeightRatio) : pixelSupport;
+    int numHCoefs = isDownScaleH ? ceil(pixelSupport / scaleWidthRatio) : pixelSupport;
+
     // Precalculate coefficients
-    double* vCoefs;
-    int vCoefsSize = cuda_preCalculateCoefficients(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
-    double* hCoefs;
-    int hCoefsSize = cuda_preCalculateCoefficients(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
+    float* vCoefsHost;
+    int vCoefsSize = cuda_preCalculateCoefficients(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefsHost);
+    float* hCoefsHost;
+    int hCoefsSize = cuda_preCalculateCoefficients(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefsHost);
 
-    // Temporary buffer
-    uint8_t** formatConversionBuffer;
-    // Allocate temporary buffer
-    allocBuffers(formatConversionBuffer, srcWidth, srcHeight, scaleFormat);
+    // Allocate coefficients buffer in device
+    float *vCoefsDevice, *hCoefsDevice;
+    cudaMalloc((void **) &vCoefsDevice, vCoefsSize * numVCoefs * sizeof(float));
+    cudaMalloc((void **) &hCoefsDevice, hCoefsSize * numHCoefs * sizeof(float));
 
-    // Resamples image to a supported format
-    cuda_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, formatConversionBuffer);
+    // Copy coefficients to device
+    cudaMemcpy(vCoefsDevice, vCoefsHost, vCoefsSize * numVCoefs * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(hCoefsDevice, hCoefsHost, hCoefsSize * numHCoefs * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Temporary buffer
-    uint8_t **resizeBuffer;
-    // Allocate temporary buffer
-    allocBuffers(resizeBuffer, dstWidth, dstHeight, scaleFormat);
+    // Free host coefficients
+    free(vCoefsHost);
+    free(hCoefsHost);
+
+    // Create source buffer in device
+    uint8_t** sourcePointers;
+    int* sourcePointersSizes;
+
+    // Create target buffer in device
+    uint8_t** forScalePointers;
+    int* forScalePointersSizes;
+
+    // Allocate source and target buffers in device
+    cudaAllocBuffers(sourcePointers, sourcePointersSizes, srcWidth, srcHeight, srcFormat);
+    cudaAllocBuffers(forScalePointers, forScalePointersSizes, srcWidth, srcHeight, scaleFormat);
+
+    // Copy source data to device
+    cudaCopyBuffersToGPU(src->data, sourcePointers, sourcePointersSizes);
+
+    // Create launch parameters of format conversion kernel
+    pair<dim3, dim3> forScaleConversionLP = calculateConversionLP(srcWidth, srcHeight, srcFormat, scaleFormat);
+    // Format conversion operation
+    cuda_formatConversion << <forScaleConversionLP.first, forScaleConversionLP.second >> > (srcWidth, srcHeight,
+        srcFormat, sourcePointers[0], sourcePointers[1], sourcePointers[2],
+        scaleFormat, forScalePointers[0], forScalePointers[1], forScalePointers[2]);
+
+    // Free source data resources
+    freeCudaMemory(sourcePointers);
+    free(sourcePointersSizes);
+
+    // Create target buffer in device
+    uint8_t** fromScalePointers;
+    int* fromScalePointersSizes;
+
+    // Allocate above buffer in device
+    cudaAllocBuffers(fromScalePointers, fromScalePointersSizes, dstWidth, dstHeight, scaleFormat);
 
     // Chroma size discovery
-    double widthPerc = 1.;
-    double heightPerc = 1.;
+    float widthPerc = 1.f;
+    float heightPerc = 1.f;
     if(scaleFormat == AV_PIX_FMT_YUV422P || scaleFormat == AV_PIX_FMT_YUV420P || scaleFormat == AV_PIX_FMT_YUV422PNORM)
-        widthPerc = .5;
+        widthPerc = .5f;
     if(scaleFormat == AV_PIX_FMT_YUV420P)
-        heightPerc = .5;
+        heightPerc = .5f;
+
+    // Create launch parameters of resize kernel
+    pair<dim3, dim3> resizeLP = calculateResizeLP(dstWidth, dstHeight);
+    // Recalculate launch parameters for chromas
+    int heightChroma = static_cast<int>(dstHeight * heightPerc);
+    int widthChroma = static_cast<int>(dstWidth * widthPerc);
+    pair<dim3, dim3> resizeChromaLP = calculateResizeLP(widthChroma, heightChroma);
 
     // Apply the resizing operation to luma channel
-    cuda_resize(srcWidth, srcHeight, formatConversionBuffer[0],
-        dstWidth, dstHeight, resizeBuffer[0], operation, pixelSupport, 0,
-        vCoefsSize, vCoefs, hCoefsSize, hCoefs);
+    cuda_resize << <resizeLP.first, resizeLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight,
+        scaleWidthRatio, scaleHeightRatio, forScalePointers[0], fromScalePointers[0], regionHRadius, regionVRadius, 0,
+        vCoefsSize, numVCoefs, vCoefsDevice, hCoefsSize, numHCoefs, hCoefsDevice);
+    
+    // Apply the resizing operation to U chroma channel
+    cuda_resize << <resizeChromaLP.first, resizeChromaLP.second >> > (static_cast<int>(srcWidth * widthPerc), static_cast<int>(srcHeight * heightPerc), widthChroma, heightChroma,
+        scaleWidthRatio, scaleHeightRatio, forScalePointers[1], fromScalePointers[1], regionHRadius, regionVRadius, 1,
+        vCoefsSize, numVCoefs, vCoefsDevice, hCoefsSize, numHCoefs, hCoefsDevice);
 
-    // Apply the resizing operation to chroma channels
-    int srcWidthChroma = static_cast<int>(srcWidth * widthPerc);
-    int srcHeightChroma = static_cast<int>(srcHeight * heightPerc);
-    int dstWidthChroma = static_cast<int>(dstWidth * widthPerc);
-    int dstHeightChroma = static_cast<int>(dstHeight * heightPerc);
-    for(int colorChannel = 1; colorChannel < 3; colorChannel++){
-        cuda_resize(srcWidthChroma, srcHeightChroma, formatConversionBuffer[colorChannel],
-            dstWidthChroma, dstHeightChroma, resizeBuffer[colorChannel], operation, pixelSupport, colorChannel,
-            vCoefsSize, vCoefs, hCoefsSize, hCoefs);
-    }
+    // Apply the resizing operation to V chroma channel
+    cuda_resize << <resizeChromaLP.first, resizeChromaLP.second >> > (static_cast<int>(srcWidth * widthPerc), static_cast<int>(srcHeight * heightPerc), widthChroma, heightChroma,
+        scaleWidthRatio, scaleHeightRatio, forScalePointers[2], fromScalePointers[2], regionHRadius, regionVRadius, 2,
+        vCoefsSize, numVCoefs, vCoefsDevice, hCoefsSize, numHCoefs, hCoefsDevice);
+
+    // Free used data resources
+    freeCudaMemory(forScalePointers);
+    free(forScalePointersSizes);
+
+    // Free coefficients in device
+    cudaFree(vCoefsDevice);
+    cudaFree(hCoefsDevice);
+
+    // Create target buffer in device
+    uint8_t** targetPointers;
+    int* targetPointersSizes;
+
+    // Allocate source and target buffers in device
+    cudaAllocBuffers(targetPointers, targetPointersSizes, dstWidth, dstHeight, dstFormat);
+
+    // Create launch parameters of format conversion kernel
+    pair<dim3, dim3> fromScaleConversionLP = calculateConversionLP(dstWidth, dstHeight, scaleFormat, dstFormat);
+    // Format conversion operation
+    cuda_formatConversion << <fromScaleConversionLP.first, fromScaleConversionLP.second >> > (dstWidth, dstHeight,
+        scaleFormat, fromScalePointers[0], fromScalePointers[1], fromScalePointers[2],
+        dstFormat, targetPointers[0], targetPointers[1], targetPointers[2]);
+
+    // Copy resulting data from device
+    cudaCopyBuffersFromGPU(dst->data, targetPointers, targetPointersSizes);
 
     // Free used resources
-    free2dBuffer(formatConversionBuffer, 3);
-    free(vCoefs);
-    free(hCoefs);
+    freeCudaMemory(fromScalePointers);
+    freeCudaMemory(targetPointers);
+    free(fromScalePointersSizes);
+    free(targetPointersSizes);
 
-    // Resamples image to target format
-    cuda_formatConversion(dstWidth, dstHeight, scaleFormat, resizeBuffer, dstFormat, dst->data);
-
-    // Free used resources
-    free2dBuffer(resizeBuffer, 3);
-    */
+    // Sucess
+    return;
 }
 
 // Wrapper for the cuda resample operation method
