@@ -108,9 +108,10 @@ int main(){
 
     // Create scaling operations
     vector<int> scaleOperations = vector<int>();
-    //scaleOperations.push_back(SWS_POINT);
+    scaleOperations.push_back(SWS_POINT);
     //scaleOperations.push_back(SWS_BILINEAR);
-    scaleOperations.push_back(SWS_BICUBIC);
+    //scaleOperations.push_back(SWS_BICUBIC);
+    //scaleOperations.push_back(SWS_LANCZOS);
 
     // Test procedures
     testAll(scaleInImgs, scaleOutImgs, scaleOperations, 1);

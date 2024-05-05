@@ -16,36 +16,36 @@ void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height
 
     // Calculate buffer sizes for each pixel format
     switch(pixelFormat){
-    case AV_PIX_FMT_UYVY422:
-        bufferSize[0] = wxh * 2;
-        bufferSize[1] = 0;
-        bufferSize[2] = 0;
-        break;
-    case AV_PIX_FMT_YUV422P:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDiv2;
-        bufferSize[2] = wxhDiv2;
-        break;
-    case AV_PIX_FMT_YUV420P:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDiv4;
-        bufferSize[2] = wxhDiv4;
-        break;
-    case AV_PIX_FMT_NV12:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDiv2;
-        bufferSize[2] = 0;
-        break;
-    case AV_PIX_FMT_V210:
-        bufferSize[0] = height * 128 * ((width + 47) / 48);
-        bufferSize[1] = 0;
-        bufferSize[2] = 0;
-        break;
-    case AV_PIX_FMT_YUV422PNORM:
-        bufferSize[0] = wxh;
-        bufferSize[1] = wxhDiv2;
-        bufferSize[2] = wxhDiv2;
-        break;
+        case AV_PIX_FMT_UYVY422:
+            bufferSize[0] = wxh * 2;
+            bufferSize[1] = 0;
+            bufferSize[2] = 0;
+            break;
+        case AV_PIX_FMT_YUV422P:
+            bufferSize[0] = wxh;
+            bufferSize[1] = wxhDiv2;
+            bufferSize[2] = wxhDiv2;
+            break;
+        case AV_PIX_FMT_YUV420P:
+            bufferSize[0] = wxh;
+            bufferSize[1] = wxhDiv4;
+            bufferSize[2] = wxhDiv4;
+            break;
+        case AV_PIX_FMT_NV12:
+            bufferSize[0] = wxh;
+            bufferSize[1] = wxhDiv2;
+            bufferSize[2] = 0;
+            break;
+        case AV_PIX_FMT_V210:
+            bufferSize[0] = height * 128 * ((width + 47) / 48);
+            bufferSize[1] = 0;
+            bufferSize[2] = 0;
+            break;
+        case AV_PIX_FMT_YUV422PNORM:
+            bufferSize[0] = wxh;
+            bufferSize[1] = wxhDiv2;
+            bufferSize[2] = wxhDiv2;
+            break;
     }
 
     // Allocate buffer memory
@@ -112,65 +112,65 @@ pair<dim3, dim3> calculateResizeLP(int width, int height){
 
 // ------------------------------------------------------------------
 
-__host__ __device__
-float w0(float a){
-    //return (1.0f/6.0f)*(-a*a*a + 3.0f*a*a - 3.0f*a + 1.0f);
-    //return (1.0f / 6.0f)*(a*(a*(-a + 3.0f) - 3.0f) + 1.0f);   // optimized
+// Nearest neighbor and bilinear hardware interpolation for tex y
+__global__ void scaleTexY(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
+    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
 
-    return -0.6f*a*a*a + 1.2f*a*a - 0.6f*a;
+    // Calculate pixel location
+    const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
+    const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
+
+    // Original index coordinates
+    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio;
+    const float colOriginal = ((float) col + .5f) / scaleWidthRatio;
+
+    // Assign color
+    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texY, colOriginal, linOriginal) * 255.f));
 }
 
-__host__ __device__
-float w1(float a){
-    //return (1.0f/6.0f)*(3.0f*a*a*a - 6.0f*a*a + 4.0f);
-    //return (1.0f / 6.0f)*(a*a*(3.0f*a - 6.0f) + 4.0f);
+// Nearest neighbor and bilinear hardware interpolation for tex u
+__global__ void scaleTexU(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
+    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
 
-    return 1.4f*a*a*a - 2.4f*a*a + 1.0f;
+    // Calculate pixel location
+    const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
+    const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
+
+    // Original index coordinates
+    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio;
+    const float colOriginal = ((float) col + .5f) / scaleWidthRatio;
+
+    // Assign color
+    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texU, colOriginal, linOriginal) * 255.f));
 }
 
-__host__ __device__
-float w2(float a){
-    //return (1.0f/6.0f)*(-3.0f*a*a*a + 3.0f*a*a + 3.0f*a + 1.0f);
-    //return (1.0f / 6.0f)*(a*(a*(-3.0f*a + 3.0f) + 3.0f) + 1.0f);
+// Nearest neighbor and bilinear hardware interpolation for tex v
+__global__ void scaleTexV(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
+    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
 
-    return -1.4f*a*a*a + 1.8f*a*a + 0.6f*a;
+    // Calculate pixel location
+    const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
+    const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
+
+    // Original index coordinates
+    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio;
+    const float colOriginal = ((float) col + .5f) / scaleWidthRatio;
+
+    // Assign color
+    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texV, colOriginal, linOriginal) * 255.f));
 }
 
-__host__ __device__
-float w3(float a){
-    //return (1.0f / 6.0f)*(a*a*a);
-
-    return a*a*a*0.6f - 0.6f*a*a;
+// Calculate coefficient of cubic interpolation
+inline __device__ float cubicFilter(const float x, const float c0, const float c1, const float c2, const float c3){
+    // Resulting color is the sum of all weighted colors
+    float result = c0 * (-.6f * x * (x * (x - 2.f) + 1.f));
+    result += c1 * (x * x * (1.4f * x - 2.4f) + 1.f);
+    result += c2 * (x * (x * (-1.4f * x + 1.8f) + .6f));
+    result += c3 * (.6f * x * x * (x - 1.f));
+    return result;
 }
 
-__device__ float g0(float a){
-    return w0(a) + w1(a);
-}
-
-__device__ float g1(float a){
-    return w2(a) + w3(a);
-}
-
-// h0 and h1 are the two offset functions
-__device__ float h0(float a){
-    // note +0.5 offset to compensate for CUDA linear filtering convention
-    return -1.0f + w1(a) / (w0(a) + w1(a)) + .5f;
-}
-
-__device__ float h1(float a){
-    return 1.0f + w3(a) / (w2(a) + w3(a)) + .5f;
-}
-
-__device__
-float cubicFilter(float x, float c0, float c1, float c2, float c3){
-    float r;
-    r = c0 * w0(x);
-    r += c1 * w1(x);
-    r += c2 * w2(x);
-    r += c3 * w3(x);
-    return r;
-}
-
+// Bicubic interpolation for tex y
 __global__ void cubicScaleY(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
     const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
 
@@ -179,41 +179,27 @@ __global__ void cubicScaleY(const int srcWidth, const int srcHeight, const int d
     const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     // Original index coordinates
-    float linOriginal = (lin + .5f) / scaleHeightRatio;
-    float colOriginal = (col + .5f) / scaleWidthRatio;
-    
-    linOriginal -= .5f;
-    colOriginal -= .5f;
+    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio - .5f;
+    const float colOriginal = ((float) col + .5f) / scaleWidthRatio - .5f;
 
-    float px = floor(colOriginal);
-    float py = floor(linOriginal);
-    float fx = colOriginal - px;
-    float fy = linOriginal - py;
+    // Calculate nearest source sample
+    const float pixLin = floorf(linOriginal);
+    const float pixCol = floorf(colOriginal);
 
-    float r = cubicFilter(fy,
-        cubicFilter(fx, tex2D(texY, px - 1, py - 1), tex2D(texY, px, py - 1), tex2D(texY, px + 1, py - 1), tex2D(texY, px + 2, py - 1)),
-        cubicFilter(fx, tex2D(texY, px - 1, py), tex2D(texY, px, py), tex2D(texY, px + 1, py), tex2D(texY, px + 2, py)),
-        cubicFilter(fx, tex2D(texY, px - 1, py + 1), tex2D(texY, px, py + 1), tex2D(texY, px + 1, py + 1), tex2D(texY, px + 2, py + 1)),
-        cubicFilter(fx, tex2D(texY, px - 1, py + 2), tex2D(texY, px, py + 2), tex2D(texY, px + 1, py + 2), tex2D(texY, px + 2, py + 2))
-        );
-
-    /*float g0x = g0(fx);
-    float g1x = g1(fx);
-    float h0x = h0(fx);
-    float h1x = h1(fx);
-    float h0y = h0(fy);
-    float h1y = h1(fy);
-
-    float r = g0(fy) * (g0x * tex2D(texY, px + h0x, py + h0y) +
-        g1x * tex2D(texY, px + h1x, py + h0y)) +
-        g1(fy) * (g0x * tex2D(texY, px + h0x, py + h1y) +
-            g1x * tex2D(texY, px + h1x, py + h1y));*/
+    // Calculate distance to the source sample
+    const float distLin = linOriginal - pixLin;
+    const float distCol = colOriginal - pixCol;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(r * 255.f));
+    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(255.f * cubicFilter(distLin,
+        cubicFilter(distCol, tex2D(texY, pixCol - 1, pixLin - 1), tex2D(texY, pixCol, pixLin - 1), tex2D(texY, pixCol + 1, pixLin - 1), tex2D(texY, pixCol + 2, pixLin - 1)),
+        cubicFilter(distCol, tex2D(texY, pixCol - 1, pixLin), tex2D(texY, pixCol, pixLin), tex2D(texY, pixCol + 1, pixLin), tex2D(texY, pixCol + 2, pixLin)),
+        cubicFilter(distCol, tex2D(texY, pixCol - 1, pixLin + 1), tex2D(texY, pixCol, pixLin + 1), tex2D(texY, pixCol + 1, pixLin + 1), tex2D(texY, pixCol + 2, pixLin + 1)),
+        cubicFilter(distCol, tex2D(texY, pixCol - 1, pixLin + 2), tex2D(texY, pixCol, pixLin + 2), tex2D(texY, pixCol + 1, pixLin + 2), tex2D(texY, pixCol + 2, pixLin + 2)))));
 }
 
-__global__ void rescaleY(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
+// Bicubic interpolation for tex u
+__global__ void cubicScaleU(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
     const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
 
     // Calculate pixel location
@@ -221,14 +207,27 @@ __global__ void rescaleY(const int srcWidth, const int srcHeight, const int dstW
     const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     // Original index coordinates
-    const float linOriginal = (lin + .5f) / scaleHeightRatio;
-    const float colOriginal = (col + .5f) / scaleWidthRatio;
+    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio - .5f;
+    const float colOriginal = ((float) col + .5f) / scaleWidthRatio - .5f;
+
+    // Calculate nearest source sample
+    const float pixLin = floorf(linOriginal);
+    const float pixCol = floorf(colOriginal);
+
+    // Calculate distance to the source sample
+    const float distLin = linOriginal - pixLin;
+    const float distCol = colOriginal - pixCol;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texY, colOriginal, linOriginal) * 255.f));
+    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(255.f * cubicFilter(distLin,
+        cubicFilter(distCol, tex2D(texU, pixCol - 1, pixLin - 1), tex2D(texU, pixCol, pixLin - 1), tex2D(texU, pixCol + 1, pixLin - 1), tex2D(texU, pixCol + 2, pixLin - 1)),
+        cubicFilter(distCol, tex2D(texU, pixCol - 1, pixLin), tex2D(texU, pixCol, pixLin), tex2D(texU, pixCol + 1, pixLin), tex2D(texU, pixCol + 2, pixLin)),
+        cubicFilter(distCol, tex2D(texU, pixCol - 1, pixLin + 1), tex2D(texU, pixCol, pixLin + 1), tex2D(texU, pixCol + 1, pixLin + 1), tex2D(texU, pixCol + 2, pixLin + 1)),
+        cubicFilter(distCol, tex2D(texU, pixCol - 1, pixLin + 2), tex2D(texU, pixCol, pixLin + 2), tex2D(texU, pixCol + 1, pixLin + 2), tex2D(texU, pixCol + 2, pixLin + 2)))));
 }
 
-__global__ void rescaleU(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
+// Bicubic interpolation for tex v
+__global__ void cubicScaleV(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
     const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
 
     // Calculate pixel location
@@ -236,14 +235,47 @@ __global__ void rescaleU(const int srcWidth, const int srcHeight, const int dstW
     const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     // Original index coordinates
-    const float linOriginal = (lin + .5f) / scaleHeightRatio;
-    const float colOriginal = (col + .5f) / scaleWidthRatio;
+    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio - .5f;
+    const float colOriginal = ((float) col + .5f) / scaleWidthRatio - .5f;
+
+    // Calculate nearest source sample
+    const float pixLin = floorf(linOriginal);
+    const float pixCol = floorf(colOriginal);
+
+    // Calculate distance to the source sample
+    const float distLin = linOriginal - pixLin;
+    const float distCol = colOriginal - pixCol;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texU, colOriginal, linOriginal) * 255.f));
+    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(255.f * cubicFilter(distLin,
+        cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin - 1), tex2D(texV, pixCol, pixLin - 1), tex2D(texV, pixCol + 1, pixLin - 1), tex2D(texV, pixCol + 2, pixLin - 1)),
+        cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin), tex2D(texV, pixCol, pixLin), tex2D(texV, pixCol + 1, pixLin), tex2D(texV, pixCol + 2, pixLin)),
+        cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin + 1), tex2D(texV, pixCol, pixLin + 1), tex2D(texV, pixCol + 1, pixLin + 1), tex2D(texV, pixCol + 2, pixLin + 1)),
+        cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin + 2), tex2D(texV, pixCol, pixLin + 2), tex2D(texV, pixCol + 1, pixLin + 2), tex2D(texV, pixCol + 2, pixLin + 2)))));
 }
 
-__global__ void rescaleV(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
+// Calculate sinc value
+inline __device__ float sincVal(const float dist){
+    const float distPi = dist * CUDART_PI_F;
+    const float distPiP = distPi / 3.f;
+    return sinf(distPi) * sinf(distPiP) / (distPi * distPiP);
+}
+
+// Calculate coefficient of lanczos interpolation
+inline __device__ float lanczosFilter(const float x, const float c0, const float c1, const float c2, const float c3, const float c4, const float c5){
+    // Resulting color is the sum of all weighted colors
+    float result = 0.f;
+    result += c0 * sincVal(x - 2.f);
+    result += c1 * sincVal(x - 1.f);
+    result += c2 * sincVal(x);
+    result += c3 * sincVal(1.f - x);
+    result += c4 * sincVal(2.f - x);
+    result += c5 * sincVal(3.f - x);
+    return result;
+}
+
+// Bicubic interpolation for tex y
+__global__ void lanczosScaleY(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
     const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
 
     // Calculate pixel location
@@ -251,11 +283,61 @@ __global__ void rescaleV(const int srcWidth, const int srcHeight, const int dstW
     const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     // Original index coordinates
-    const float linOriginal = (lin + .5f) / scaleHeightRatio;
-    const float colOriginal = (col + .5f) / scaleWidthRatio;
+    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio - .5f;
+    const float colOriginal = ((float) col + .5f) / scaleWidthRatio - .5f;
+
+    // Calculate nearest source sample
+    const float pixLin = floorf(linOriginal);
+    const float pixCol = floorf(colOriginal);
+
+    // Calculate distance to the source sample
+    const float distLin = linOriginal - pixLin;
+    const float distCol = colOriginal - pixCol;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texV, colOriginal, linOriginal) * 255.f));
+    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(255.f * lanczosFilter(distLin,
+        lanczosFilter(distCol,
+            tex2D(texY, pixCol - 2, pixLin - 2),
+            tex2D(texY, pixCol - 1, pixLin - 2),
+            tex2D(texY, pixCol, pixLin - 2),
+            tex2D(texY, pixCol + 1, pixLin - 2),
+            tex2D(texY, pixCol + 2, pixLin - 2),
+            tex2D(texY, pixCol + 3, pixLin - 2)),
+        lanczosFilter(distCol,
+            tex2D(texY, pixCol - 2, pixLin - 1),
+            tex2D(texY, pixCol - 1, pixLin - 1),
+            tex2D(texY, pixCol, pixLin - 1),
+            tex2D(texY, pixCol + 1, pixLin - 1),
+            tex2D(texY, pixCol + 2, pixLin - 1),
+            tex2D(texY, pixCol + 3, pixLin - 1)),
+        lanczosFilter(distCol,
+            tex2D(texY, pixCol - 2, pixLin),
+            tex2D(texY, pixCol - 1, pixLin),
+            tex2D(texY, pixCol, pixLin),
+            tex2D(texY, pixCol + 1, pixLin),
+            tex2D(texY, pixCol + 2, pixLin),
+            tex2D(texY, pixCol + 3, pixLin)),
+        lanczosFilter(distCol,
+            tex2D(texY, pixCol - 2, pixLin + 1),
+            tex2D(texY, pixCol - 1, pixLin + 1),
+            tex2D(texY, pixCol, pixLin + 1),
+            tex2D(texY, pixCol + 1, pixLin + 1),
+            tex2D(texY, pixCol + 2, pixLin + 1),
+            tex2D(texY, pixCol + 3, pixLin + 1)),
+        lanczosFilter(distCol,
+            tex2D(texY, pixCol - 2, pixLin + 2),
+            tex2D(texY, pixCol - 1, pixLin + 2),
+            tex2D(texY, pixCol, pixLin + 2),
+            tex2D(texY, pixCol + 1, pixLin + 2),
+            tex2D(texY, pixCol + 2, pixLin + 2),
+            tex2D(texY, pixCol + 3, pixLin + 2)),
+        lanczosFilter(distCol,
+            tex2D(texY, pixCol - 2, pixLin + 3),
+            tex2D(texY, pixCol - 1, pixLin + 3),
+            tex2D(texY, pixCol, pixLin + 3),
+            tex2D(texY, pixCol + 1, pixLin + 3),
+            tex2D(texY, pixCol + 2, pixLin + 3),
+            tex2D(texY, pixCol + 3, pixLin + 3)))));
 }
 
 // Prepares the resample operation
@@ -336,19 +418,15 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     cudaBindTextureToArray(&texV, vArray, &channelDesc);
 
     // Set interpolation method
-    if(operation == SWS_POINT){
-        texY.filterMode = cudaFilterModePoint;
-        texU.filterMode = cudaFilterModePoint;
-        texV.filterMode = cudaFilterModePoint;
-    } else{
+    if(operation == SWS_BILINEAR){
         texY.filterMode = cudaFilterModeLinear;
         texU.filterMode = cudaFilterModeLinear;
         texV.filterMode = cudaFilterModeLinear;
+    } else{
+        texY.filterMode = cudaFilterModePoint;
+        texU.filterMode = cudaFilterModePoint;
+        texV.filterMode = cudaFilterModePoint;
     }
-
-    texY.filterMode = cudaFilterModePoint;
-    texU.filterMode = cudaFilterModePoint;
-    texV.filterMode = cudaFilterModePoint;
 
     // Free source data
     free2dBuffer(scaleFormatConverted, 3);
@@ -364,12 +442,16 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     pair<dim3, dim3> chromaLP = calculateResizeLP(dstWidthChroma, dstHeightChroma);
 
     // Scale each component
-    if(operation != SWS_BICUBIC){
-        rescaleY << <lumaLP.first, lumaLP.second >> >(srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
-        rescaleU << <chromaLP.first, chromaLP.second >> >(srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[1]);
-        rescaleV << <chromaLP.first, chromaLP.second >> >(srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[2]);
+    if(operation == SWS_POINT || operation == SWS_BILINEAR){
+        scaleTexY << <lumaLP.first, lumaLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
+        scaleTexU << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[1]);
+        scaleTexV << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[2]);
+    } else if(operation == SWS_BICUBIC){
+        cubicScaleY << <lumaLP.first, lumaLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
+        cubicScaleU << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[1]);
+        cubicScaleV << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[2]);
     } else{
-        cubicScaleY << <lumaLP.first, lumaLP.second >> >(srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
+        lanczosScaleY << <lumaLP.first, lumaLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
     }
 
     // Free cuda arrays
