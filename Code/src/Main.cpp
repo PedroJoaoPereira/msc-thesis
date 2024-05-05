@@ -52,21 +52,11 @@ int main(){
     bool isTestSequential = true;
     bool isTestOpenMP = true;
 
-    int nTimes = 50;
+    int nTimes = 1;
 
     // Create resample operations
     vector<int> resampleOperations = vector<int>();
     resampleOperations.push_back(SWS_POINT);
-
-    // RESAMPLE V210 ------------------------------------------------
-    vector<ImageInfo*> v210ResampleInImgs = vector<ImageInfo*>();
-    v210ResampleInImgs.push_back(img_v210_1920x1080);
-    vector<ImageInfo*> v210ResampleOutImgs = vector<ImageInfo*>();
-    //v210ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
-    //v210ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-    //v210ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422PNORM));
-
-    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, v210ResampleInImgs, v210ResampleOutImgs, resampleOperations, nTimes);
 
     // RESAMPLE UYVY422 ---------------------------------------------
     vector<ImageInfo*> uyvy422ResampleInImgs = vector<ImageInfo*>();
@@ -84,12 +74,21 @@ int main(){
     yuv422pResampleInImgs.push_back(img_yuv422p_1920x1080);
     vector<ImageInfo*> yuv422pResampleOutImgs = vector<ImageInfo*>();
     //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
-
     //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));    
     //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
     //yuv422pResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
     //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, yuv422pResampleInImgs, yuv422pResampleOutImgs, resampleOperations, nTimes);
+
+    // RESAMPLE V210 ------------------------------------------------
+    vector<ImageInfo*> v210ResampleInImgs = vector<ImageInfo*>();
+    v210ResampleInImgs.push_back(img_v210_1920x1080);
+    vector<ImageInfo*> v210ResampleOutImgs = vector<ImageInfo*>();
+    //v210ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
+    //v210ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
+    //v210ResampleOutImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422PNORM));
+
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, v210ResampleInImgs, v210ResampleOutImgs, resampleOperations, nTimes);
 
     // TEST SCALING -------------------------------------------------
 
@@ -97,19 +96,19 @@ int main(){
     vector<int> scaleOperations = vector<int>();
     //scaleOperations.push_back(SWS_POINT);
     //scaleOperations.push_back(SWS_BILINEAR);
-    scaleOperations.push_back(SWS_BICUBIC);
-    //scaleOperations.push_back(SWS_LANCZOS);
+    //scaleOperations.push_back(SWS_BICUBIC);
+    scaleOperations.push_back(SWS_LANCZOS);
 
     // Test uyvy422 resample
     vector<ImageInfo*> scaleInImgs = vector<ImageInfo*>();
     scaleInImgs.push_back(img_uyvy422_1920x1080);
     vector<ImageInfo*> scaleOutImgs = vector<ImageInfo*>();
-    //scaleOutImgs.push_back(new ImageInfo("imgs/results/scale/", 1280, 720, AV_PIX_FMT_UYVY422));
-    //scaleOutImgs.push_back(new ImageInfo("imgs/results/scale/", 3840, 2160, AV_PIX_FMT_UYVY422));
-    //scaleOutImgs.push_back(new ImageInfo("imgs/results/scale/", 7680, 4320, AV_PIX_FMT_UYVY422));
+    scaleOutImgs.push_back(new ImageInfo("imgs/results/", 1280, 720, AV_PIX_FMT_UYVY422));
+    scaleOutImgs.push_back(new ImageInfo("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
+    //scaleOutImgs.push_back(new ImageInfo("imgs/results/", 7680, 4320, AV_PIX_FMT_UYVY422));
 
     // Test procedures
-    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, scaleInImgs, scaleOutImgs, scaleOperations, nTimes);
+    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, scaleInImgs, scaleOutImgs, scaleOperations, nTimes);
 
     // Success
     return 0;

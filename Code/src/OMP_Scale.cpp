@@ -221,26 +221,25 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
 
         // Calculate once
         int heightDiv2 = srcHeight / 2;
-        int strideMul2 = stride * 2;
         int strideDiv2 = stride / 2;
 
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int lin = 0; lin < heightDiv2; lin++) {
             // Calculate once
-            int linMulStride = lin * stride;
-            int linMul2MulStride = lin * 2 * stride;
+            int linMul2 = lin * 2;
+            int linMul2MulStrideDiv2 = linMul2 * strideDiv2;
             int linMulStrideDiv2 = lin * strideDiv2;
 
             // Buffer pointers
-            auto srcBuffer = srcSlice[0] + linMul2MulStride;
-            auto srcBufferChromaU = srcSlice[1] + linMulStride;
-            auto srcBufferChromaV = srcSlice[2] + linMulStride;
+            auto srcBuffer = srcSlice[0] + linMul2 * stride;
             auto srcBufferBelow = srcBuffer + stride;
-            auto srcBufferChromaUBelow = srcBufferChromaU + stride;
-            auto srcBufferChromaVBelow = srcBufferChromaV + stride;
-            auto dstBuffer = dstSlice[0] + linMul2MulStride;
-            auto dstBufferBelow = dstBuffer + stride;
+            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
+            auto dstBufferBelow = dstBuffer + srcWidth;
+            auto srcBufferChromaU = srcSlice[1] + linMul2MulStrideDiv2;
+            auto srcBufferChromaV = srcSlice[2] + linMul2MulStrideDiv2;
+            auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
+            auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
             auto dstBufferChromaU = dstSlice[1] + linMulStrideDiv2;
             auto dstBufferChromaV = dstSlice[2] + linMulStrideDiv2;
 
@@ -277,20 +276,20 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         #pragma omp parallel for schedule(static)
         for (int lin = 0; lin < heightDiv2; lin++) {
             // Calculate once
-            int linMulStride = lin * stride;
-            int linMul2MulStride = lin * 2 * stride;
+            int linMul2 = lin * 2;
+            int linMul2MulStrideDiv2 = linMul2 * strideDiv2;
             int linMulStrideDiv2 = lin * strideDiv2;
 
             // Buffer pointers
-            auto srcBuffer = srcSlice[0] + linMul2MulStride;
-            auto srcBufferChromaU = srcSlice[1] + linMulStride;
-            auto srcBufferChromaV = srcSlice[2] + linMulStride;
+            auto srcBuffer = srcSlice[0] + linMul2 * stride;
             auto srcBufferBelow = srcBuffer + stride;
-            auto srcBufferChromaUBelow = srcBufferChromaU + stride;
-            auto srcBufferChromaVBelow = srcBufferChromaV + stride;
-            auto dstBuffer = dstSlice[0] + linMul2MulStride;
-            auto dstBufferBelow = dstBuffer + stride;
-            auto dstBufferChroma = dstSlice[1] + lin * strideDiv2 * 2;
+            auto dstBuffer = dstSlice[0] + linMul2 * srcWidth;
+            auto dstBufferBelow = dstBuffer + srcWidth;
+            auto srcBufferChromaU = srcSlice[1] + linMul2MulStrideDiv2;
+            auto srcBufferChromaV = srcSlice[2] + linMul2MulStrideDiv2;
+            auto srcBufferChromaUBelow = srcBufferChromaU + strideDiv2;
+            auto srcBufferChromaVBelow = srcBufferChromaV + strideDiv2;
+            auto dstBufferChroma = dstSlice[1] + lin * stride;
 
             for (int col = 0; col < strideDiv2; col++) {
                 PrecisionType u0 = static_cast<PrecisionType>(*srcBufferChromaU++); // U0
@@ -317,18 +316,21 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Number of elements
         long numElements = srcStride[0] * srcHeight / 6;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]);
-
         // Assign once
         enum { SHIFT_8TO10B = 2U, SHIFT_LEFT = 20U, SHIFT_MIDDLE = 10U, };
 
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int index = 0; index < numElements; index++) {
+            // Calculate once
+            int indexMul3 = index * 3;
+
+            // Buffer pointers
+            auto srcBuffer = srcSlice[0] + index * 6;
+            auto srcBufferChromaU = srcSlice[1] + indexMul3;
+            auto srcBufferChromaV = srcSlice[2] + indexMul3;
+            auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]) + index * 4;
+
             auto u0 = *srcBufferChromaU++ << SHIFT_8TO10B; // U0
             auto y0 = *srcBuffer++ << SHIFT_8TO10B; // Y0
             auto v0 = *srcBufferChromaV++ << SHIFT_8TO10B; // V0
@@ -418,11 +420,14 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int index = 0; index < numElements; index++) {
+            // Calculate once
+            int indexMul3 = index * 3;
+
             // Buffer pointers
             auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]) + index * 4;
             auto dstBuffer = dstSlice[0] + index * 6;
-            auto dstBufferChromaU = dstSlice[1] + index * 3;
-            auto dstBufferChromaV = dstSlice[2] + index * 3;
+            auto dstBufferChromaU = dstSlice[1] + indexMul3;
+            auto dstBufferChromaV = dstSlice[2] + indexMul3;
 
             auto u0 = (*srcBuffer >> SHIFT_10TO8B) & XFF; // U0
             auto y0 = ((*srcBuffer >> SHIFT_10TO8B) >> SHIFT_MIDDLE) & XFF; // Y0
@@ -479,11 +484,14 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int index = 0; index < numElements; index++) {
+            // Calculate once
+            int indexMul3 = index * 3;
+
             // Buffer pointers
             auto srcBuffer = reinterpret_cast<uint32_t*>(srcSlice[0]) + index * 4;
             auto dstBuffer = dstSlice[0] + index * 6;
-            auto dstBufferChromaU = dstSlice[1] + index * 3;
-            auto dstBufferChromaV = dstSlice[2] + index * 3;
+            auto dstBufferChromaU = dstSlice[1] + indexMul3;
+            auto dstBufferChromaV = dstSlice[2] + indexMul3;
 
             auto u0 = *srcBuffer & X3FF; // U0
             auto y0 = (*srcBuffer >> SHIFT_MIDDLE) & X3FF; // Y0
@@ -529,12 +537,6 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Number of elements
         long numElements = srcStride[0] * srcHeight / 6;
 
-        // Buffer pointers
-        auto srcBuffer = srcSlice[0];
-        auto srcBufferChromaU = srcSlice[1];
-        auto srcBufferChromaV = srcSlice[2];
-        auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]);
-
         // Calculate once
         PrecisionType value16 = static_cast<PrecisionType>(16.);
         PrecisionType valueConstLuma = static_cast<PrecisionType>(1023.) / static_cast<PrecisionType>(219.);
@@ -546,6 +548,15 @@ int omp_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_t* srcS
         // Loop through each pixel
         #pragma omp parallel for schedule(static)
         for (int index = 0; index < numElements; index++) {
+            // Calculate once
+            int indexMul3 = index * 3;
+
+            // Buffer pointers
+            auto srcBuffer = srcSlice[0] + index * 6;
+            auto srcBufferChromaU = srcSlice[1] + indexMul3;
+            auto srcBufferChromaV = srcSlice[2] + indexMul3;
+            auto dstBuffer = reinterpret_cast<uint32_t*>(dstSlice[0]) + index * 4;
+
             auto u0bpp8 = *srcBufferChromaU++; // U0
             auto y0bpp8 = *srcBuffer++; // Y0
             auto v0bpp8 = *srcBufferChromaV++; // V0
@@ -739,7 +750,7 @@ int omp_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
     else
         scalingSupportedFormat = getTempScaleFormat(srcFormat);
 
-#pragma region INITIALIZE TEMPORARY FRAMES
+    #pragma region INITIALIZE TEMPORARY FRAMES
     // Temporary frames used in intermediate operations
     uint8_t* resampleBuffer, *scaleBuffer;
     AVFrame* resampleFrame, *scaleFrame;
@@ -767,13 +778,13 @@ int omp_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
             return -1;
         }
     }
-#pragma endregion
+    #pragma endregion
 
     // Last resample frame
     AVFrame* lastResampleFrame = src;
     int lastResamplePixelFormat = srcFormat;
 
-#pragma region RESIZE OPERATION
+    #pragma region RESIZE OPERATION
     // Verify if is not only a resample operation
     if (!isOnlyResample) {
         // Resamples image to a supported format
@@ -794,9 +805,21 @@ int omp_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
 
         // Create variables for precalculated coefficients
         PrecisionType** vCoefs;
-        int vCoefsSize = omp_preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
+        int vCoefsSize;
         PrecisionType** hCoefs;
-        int hCoefsSize = omp_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
+        int hCoefsSize;
+        #pragma omp parallel sections
+        {
+            #pragma omp section
+            {
+                vCoefsSize = omp_preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
+            }
+
+            #pragma omp section
+            {
+                hCoefsSize = omp_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
+            }
+        }
 
         // Calculate the chroma size depending on the source data pixel format
         float tempWidthRatio = 1.f;
@@ -832,9 +855,9 @@ int omp_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         lastResampleFrame = scaleFrame;
         lastResamplePixelFormat = scalingSupportedFormat;
     }
-#pragma endregion
+    #pragma endregion
 
-#pragma region LAST RESAMPLE
+    #pragma region LAST RESAMPLE
     // Last resample to destination frame
     if (omp_resampler<PrecisionType>(dstWidth, dstHeight, lastResamplePixelFormat, lastResampleFrame->data, lastResampleFrame->linesize,
         dstWidth, dstHeight, dstFormat, dst->data, dst->linesize) < 0) {
@@ -844,7 +867,7 @@ int omp_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         }
         return -2;
     }
-#pragma endregion
+    #pragma endregion
 
     // Free used resources
     if (!isOnlyResample) {
