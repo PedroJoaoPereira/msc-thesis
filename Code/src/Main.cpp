@@ -87,8 +87,9 @@ int main(){
     // Create scale input images
     vector<ImageClass*> scaleInImgs = vector<ImageClass*>();
     scaleInImgs.push_back(img_uyvy422_1920x1080);
-    //scaleInImgs.push_back(img_uyvy422_7680x4320);
-    //scaleInImgs.push_back(img_uyvy422_48x48);
+    //scaleInImgs.push_back(img_yuv422p_1920x1080);
+    //scaleInImgs.push_back(img_yuv420p_1920x1080);
+    //scaleInImgs.push_back(img_v210_1920x1080);
 
     // Load all images
     for(int index = 0; index < scaleInImgs.size(); index++)
@@ -104,14 +105,13 @@ int main(){
     scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_YUV422P));
 
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 2048, 1080, AV_PIX_FMT_YUV422P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
 
     // Create scaling operations
     vector<int> scaleOperations = vector<int>();
-    scaleOperations.push_back(SWS_POINT);
+    //scaleOperations.push_back(SWS_POINT);
     //scaleOperations.push_back(SWS_BILINEAR);
-    //scaleOperations.push_back(SWS_BICUBIC);
-    //scaleOperations.push_back(SWS_LANCZOS);
+    scaleOperations.push_back(SWS_BICUBIC);
 
     // Test procedures
     testAll(scaleInImgs, scaleOutImgs, scaleOperations, 1);

@@ -5,23 +5,18 @@ texture<uint8_t, cudaTextureType2D, cudaReadModeNormalizedFloat> texU;
 texture<uint8_t, cudaTextureType2D, cudaReadModeNormalizedFloat> texV;
 
 // Allocate image channels data buffers depending of the pixel format
-void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height, int pixelFormat){
-    // Allocate channel buffer size
-    bufferSize = static_cast<int*>(malloc(3 * sizeof(int)));
-
+void cudaAllocBuffers(uint8_t* &buffer, int* &bufferSize, int width, int height, int pixelFormat){
     // Calculate once
     int wxh = width * height;
     int wxhDiv2 = wxh / 2;
     int wxhDiv4 = wxh / 4;
 
+    // Allocate channel buffer size
+    bufferSize = static_cast<int*>(malloc(3 * sizeof(int)));
     // Calculate buffer sizes for each pixel format
     switch(pixelFormat){
-        case AV_PIX_FMT_UYVY422:
-            bufferSize[0] = wxh * 2;
-            bufferSize[1] = 0;
-            bufferSize[2] = 0;
-            break;
         case AV_PIX_FMT_YUV422P:
+        case AV_PIX_FMT_YUV422PNORM:
             bufferSize[0] = wxh;
             bufferSize[1] = wxhDiv2;
             bufferSize[2] = wxhDiv2;
@@ -31,42 +26,10 @@ void cudaAllocBuffers(uint8_t** &buffer, int* &bufferSize, int width, int height
             bufferSize[1] = wxhDiv4;
             bufferSize[2] = wxhDiv4;
             break;
-        case AV_PIX_FMT_NV12:
-            bufferSize[0] = wxh;
-            bufferSize[1] = wxhDiv2;
-            bufferSize[2] = 0;
-            break;
-        case AV_PIX_FMT_V210:
-            bufferSize[0] = height * 128 * ((width + 47) / 48);
-            bufferSize[1] = 0;
-            bufferSize[2] = 0;
-            break;
-        case AV_PIX_FMT_YUV422PNORM:
-            bufferSize[0] = wxh;
-            bufferSize[1] = wxhDiv2;
-            bufferSize[2] = wxhDiv2;
-            break;
     }
 
-    // Allocate buffer memory
-    buffer = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
-
-    // Allocate buffer in the GPU memory
-    cudaMalloc((void **) &buffer[0], bufferSize[0]);
-    if(bufferSize[1] != 0)
-        cudaMalloc((void **) &buffer[1], bufferSize[1]);
-    if(bufferSize[2] != 0)
-        cudaMalloc((void **) &buffer[2], bufferSize[2]);
-}
-
-// Free used GPU memory
-void freeCudaMemory(uint8_t** &buffer){
-    // Iterate each channel and free memory
-    for(int i = 0; i < 3; i++)
-        cudaFree(buffer[i]);
-
-    // Free host memory
-    free(buffer);
+    // Allocate buffer memory in device
+    cudaMalloc((void **) &buffer, bufferSize[0] + bufferSize[1] + bufferSize[2]);
 }
 
 // Copy data from host to device
@@ -130,7 +93,7 @@ __global__ void scaleTexY(const int srcWidth, const int srcHeight, const int dst
 
 // Nearest neighbor and bilinear hardware interpolation for tex u
 __global__ void scaleTexU(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
-    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
+    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData, const int dstOffset){
 
     // Calculate pixel location
     const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
@@ -141,12 +104,12 @@ __global__ void scaleTexU(const int srcWidth, const int srcHeight, const int dst
     const float colOriginal = ((float) col + .5f) / scaleWidthRatio;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texU, colOriginal, linOriginal) * 255.f));
+    dstData[__mul24(lin, dstWidth) + col + dstOffset] = uint8_t(roundf(tex2D(texU, colOriginal, linOriginal) * 255.f));
 }
 
 // Nearest neighbor and bilinear hardware interpolation for tex v
 __global__ void scaleTexV(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
-    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
+    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData, const int dstOffset){
 
     // Calculate pixel location
     const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
@@ -157,7 +120,7 @@ __global__ void scaleTexV(const int srcWidth, const int srcHeight, const int dst
     const float colOriginal = ((float) col + .5f) / scaleWidthRatio;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(tex2D(texV, colOriginal, linOriginal) * 255.f));
+    dstData[__mul24(lin, dstWidth) + col + dstOffset] = uint8_t(roundf(tex2D(texV, colOriginal, linOriginal) * 255.f));
 }
 
 // Calculate coefficient of cubic interpolation
@@ -200,7 +163,7 @@ __global__ void cubicScaleY(const int srcWidth, const int srcHeight, const int d
 
 // Bicubic interpolation for tex u
 __global__ void cubicScaleU(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
-    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
+    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData, const int dstOffset){
 
     // Calculate pixel location
     const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
@@ -219,7 +182,7 @@ __global__ void cubicScaleU(const int srcWidth, const int srcHeight, const int d
     const float distCol = colOriginal - pixCol;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(255.f * cubicFilter(distLin,
+    dstData[__mul24(lin, dstWidth) + col + dstOffset] = uint8_t(roundf(255.f * cubicFilter(distLin,
         cubicFilter(distCol, tex2D(texU, pixCol - 1, pixLin - 1), tex2D(texU, pixCol, pixLin - 1), tex2D(texU, pixCol + 1, pixLin - 1), tex2D(texU, pixCol + 2, pixLin - 1)),
         cubicFilter(distCol, tex2D(texU, pixCol - 1, pixLin), tex2D(texU, pixCol, pixLin), tex2D(texU, pixCol + 1, pixLin), tex2D(texU, pixCol + 2, pixLin)),
         cubicFilter(distCol, tex2D(texU, pixCol - 1, pixLin + 1), tex2D(texU, pixCol, pixLin + 1), tex2D(texU, pixCol + 1, pixLin + 1), tex2D(texU, pixCol + 2, pixLin + 1)),
@@ -228,7 +191,7 @@ __global__ void cubicScaleU(const int srcWidth, const int srcHeight, const int d
 
 // Bicubic interpolation for tex v
 __global__ void cubicScaleV(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
-    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
+    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData, const int dstOffset){
 
     // Calculate pixel location
     const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
@@ -247,97 +210,11 @@ __global__ void cubicScaleV(const int srcWidth, const int srcHeight, const int d
     const float distCol = colOriginal - pixCol;
 
     // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(255.f * cubicFilter(distLin,
+    dstData[__mul24(lin, dstWidth) + col + dstOffset] = uint8_t(roundf(255.f * cubicFilter(distLin,
         cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin - 1), tex2D(texV, pixCol, pixLin - 1), tex2D(texV, pixCol + 1, pixLin - 1), tex2D(texV, pixCol + 2, pixLin - 1)),
         cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin), tex2D(texV, pixCol, pixLin), tex2D(texV, pixCol + 1, pixLin), tex2D(texV, pixCol + 2, pixLin)),
         cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin + 1), tex2D(texV, pixCol, pixLin + 1), tex2D(texV, pixCol + 1, pixLin + 1), tex2D(texV, pixCol + 2, pixLin + 1)),
         cubicFilter(distCol, tex2D(texV, pixCol - 1, pixLin + 2), tex2D(texV, pixCol, pixLin + 2), tex2D(texV, pixCol + 1, pixLin + 2), tex2D(texV, pixCol + 2, pixLin + 2)))));
-}
-
-// Calculate sinc value
-inline __device__ float sincVal(const float dist){
-    const float distPi = dist * CUDART_PI_F;
-    const float distPiP = distPi / 3.f;
-    return sinf(distPi) * sinf(distPiP) / (distPi * distPiP);
-}
-
-// Calculate coefficient of lanczos interpolation
-inline __device__ float lanczosFilter(const float x, const float c0, const float c1, const float c2, const float c3, const float c4, const float c5){
-    // Resulting color is the sum of all weighted colors
-    float result = 0.f;
-    result += c0 * sincVal(x - 2.f);
-    result += c1 * sincVal(x - 1.f);
-    result += c2 * sincVal(x);
-    result += c3 * sincVal(1.f - x);
-    result += c4 * sincVal(2.f - x);
-    result += c5 * sincVal(3.f - x);
-    return result;
-}
-
-// Bicubic interpolation for tex y
-__global__ void lanczosScaleY(const int srcWidth, const int srcHeight, const int dstWidth, const int dstHeight,
-    const float scaleWidthRatio, const float scaleHeightRatio, uint8_t* dstData){
-
-    // Calculate pixel location
-    const int lin = __mul24(blockIdx.y, blockDim.y) + threadIdx.y;
-    const int col = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;
-
-    // Original index coordinates
-    const float linOriginal = ((float) lin + .5f) / scaleHeightRatio - .5f;
-    const float colOriginal = ((float) col + .5f) / scaleWidthRatio - .5f;
-
-    // Calculate nearest source sample
-    const float pixLin = floorf(linOriginal);
-    const float pixCol = floorf(colOriginal);
-
-    // Calculate distance to the source sample
-    const float distLin = linOriginal - pixLin;
-    const float distCol = colOriginal - pixCol;
-
-    // Assign color
-    dstData[__mul24(lin, dstWidth) + col] = uint8_t(roundf(255.f * lanczosFilter(distLin,
-        lanczosFilter(distCol,
-            tex2D(texY, pixCol - 2, pixLin - 2),
-            tex2D(texY, pixCol - 1, pixLin - 2),
-            tex2D(texY, pixCol, pixLin - 2),
-            tex2D(texY, pixCol + 1, pixLin - 2),
-            tex2D(texY, pixCol + 2, pixLin - 2),
-            tex2D(texY, pixCol + 3, pixLin - 2)),
-        lanczosFilter(distCol,
-            tex2D(texY, pixCol - 2, pixLin - 1),
-            tex2D(texY, pixCol - 1, pixLin - 1),
-            tex2D(texY, pixCol, pixLin - 1),
-            tex2D(texY, pixCol + 1, pixLin - 1),
-            tex2D(texY, pixCol + 2, pixLin - 1),
-            tex2D(texY, pixCol + 3, pixLin - 1)),
-        lanczosFilter(distCol,
-            tex2D(texY, pixCol - 2, pixLin),
-            tex2D(texY, pixCol - 1, pixLin),
-            tex2D(texY, pixCol, pixLin),
-            tex2D(texY, pixCol + 1, pixLin),
-            tex2D(texY, pixCol + 2, pixLin),
-            tex2D(texY, pixCol + 3, pixLin)),
-        lanczosFilter(distCol,
-            tex2D(texY, pixCol - 2, pixLin + 1),
-            tex2D(texY, pixCol - 1, pixLin + 1),
-            tex2D(texY, pixCol, pixLin + 1),
-            tex2D(texY, pixCol + 1, pixLin + 1),
-            tex2D(texY, pixCol + 2, pixLin + 1),
-            tex2D(texY, pixCol + 3, pixLin + 1)),
-        lanczosFilter(distCol,
-            tex2D(texY, pixCol - 2, pixLin + 2),
-            tex2D(texY, pixCol - 1, pixLin + 2),
-            tex2D(texY, pixCol, pixLin + 2),
-            tex2D(texY, pixCol + 1, pixLin + 2),
-            tex2D(texY, pixCol + 2, pixLin + 2),
-            tex2D(texY, pixCol + 3, pixLin + 2)),
-        lanczosFilter(distCol,
-            tex2D(texY, pixCol - 2, pixLin + 3),
-            tex2D(texY, pixCol - 1, pixLin + 3),
-            tex2D(texY, pixCol, pixLin + 3),
-            tex2D(texY, pixCol + 1, pixLin + 3),
-            tex2D(texY, pixCol + 2, pixLin + 3),
-            tex2D(texY, pixCol + 3, pixLin + 3)))));
 }
 
 // Prepares the resample operation
@@ -358,12 +235,12 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         return;
     }
 
+    // Get standard supported pixel format in scaling
+    int scaleFormat = getScaleFormat(srcFormat, dstFormat);
+
     // Get scale ratios
     float scaleHeightRatio = static_cast<float>(dstHeight) / static_cast<float>(srcHeight);
     float scaleWidthRatio = static_cast<float>(dstWidth) / static_cast<float>(srcWidth);
-
-    // Get standard supported pixel format in scaling
-    int scaleFormat = getScaleFormat(srcFormat, dstFormat);
 
     // Calculate the size of the chroma components
     int srcHeightChroma = srcHeight;
@@ -379,6 +256,20 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         dstHeightChroma /= 2;
     }
 
+    // Buffers for first format conversion
+    uint8_t* toScale;
+    cudaMallocHost((void **) &toScale, srcHeight * srcWidth + 2 * srcHeightChroma * srcWidthChroma);
+    uint8_t** toScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    toScalePtrs[0] = toScale;
+    toScalePtrs[1] = toScalePtrs[0] + srcHeight * srcWidth;
+    toScalePtrs[2] = toScalePtrs[1] + srcHeightChroma * srcWidthChroma;
+
+    // Format conversion operation
+    omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, toScalePtrs);
+
+    // Create channel texture descriptor
+    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
+
     // Set configurations of texture memory
     texY.addressMode[0] = cudaAddressModeClamp;
     texY.addressMode[1] = cudaAddressModeClamp;
@@ -389,33 +280,6 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     texV.addressMode[0] = cudaAddressModeClamp;
     texV.addressMode[1] = cudaAddressModeClamp;
     texV.normalized = false;
-
-    // Temporary buffer
-    uint8_t** scaleFormatConverted;
-    // Allocate channel buffer pointers
-    allocBuffers(scaleFormatConverted, srcWidth, srcHeight, scaleFormat);
-
-    // Format conversion operation
-    omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, scaleFormat, scaleFormatConverted);
-
-    // Create channel texture descriptor
-    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
-
-    // Create a 2d cuda array for each component
-    cudaArray *yArray, *uArray, *vArray;
-    cudaMallocArray(&yArray, &channelDesc, srcWidth, srcHeight);
-    cudaMallocArray(&uArray, &channelDesc, srcWidthChroma, srcHeightChroma);
-    cudaMallocArray(&vArray, &channelDesc, srcWidthChroma, srcHeightChroma);
-
-    // Copy components to cuda arrays
-    cudaMemcpyToArray(yArray, 0, 0, scaleFormatConverted[0], srcHeight * srcWidth, cudaMemcpyHostToDevice);
-    cudaMemcpyToArray(uArray, 0, 0, scaleFormatConverted[1], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice);
-    cudaMemcpyToArray(vArray, 0, 0, scaleFormatConverted[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice);
-
-    // Bind textures to device memory
-    cudaBindTextureToArray(&texY, yArray, &channelDesc);
-    cudaBindTextureToArray(&texU, uArray, &channelDesc);
-    cudaBindTextureToArray(&texV, vArray, &channelDesc);
 
     // Set interpolation method
     if(operation == SWS_BILINEAR){
@@ -428,54 +292,92 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         texV.filterMode = cudaFilterModePoint;
     }
 
-    // Free source data
-    free2dBuffer(scaleFormatConverted, 3);
+    // Create a 2d cuda array for each source component
+    cudaArray *ySrc, *uSrc, *vSrc;
+    cudaMallocArray(&ySrc, &channelDesc, srcWidth, srcHeight);
+    cudaMallocArray(&uSrc, &channelDesc, srcWidthChroma, srcHeightChroma);
+    cudaMallocArray(&vSrc, &channelDesc, srcWidthChroma, srcHeightChroma);
 
-    // Create target buffer in device
-    uint8_t** scaledDevice;
-    int* scaledDeviceSizes;
-    // Allocate source buffer in device
-    cudaAllocBuffers(scaledDevice, scaledDeviceSizes, dstWidth, dstHeight, scaleFormat);
+    // Bind textures to device memory
+    cudaBindTextureToArray(&texY, ySrc, &channelDesc);
+    cudaBindTextureToArray(&texU, uSrc, &channelDesc);
+    cudaBindTextureToArray(&texV, vSrc, &channelDesc);
 
     // Calculate launch parameters
     pair<dim3, dim3> lumaLP = calculateResizeLP(dstWidth, dstHeight);
     pair<dim3, dim3> chromaLP = calculateResizeLP(dstWidthChroma, dstHeightChroma);
 
+    // Create cuda streams for concurrent execution of kernels
+    cudaStream_t streamY, streamU, streamV;
+    cudaStreamCreate(&streamY);
+    cudaStreamCreate(&streamU);
+    cudaStreamCreate(&streamV);
+
+    // Create target buffer in device
+    uint8_t* scaledDevice;
+    int* scaledDeviceSizes;
+    // Allocate source buffer in device
+    cudaAllocBuffers(scaledDevice, scaledDeviceSizes, dstWidth, dstHeight, scaleFormat);
+    // Calculate once the offsets
+    int offsetFrom0 = scaledDeviceSizes[0];
+    int offsetFrom1 = offsetFrom0 + scaledDeviceSizes[1];
+
+    // Buffers for last format conversion
+    uint8_t* fromScale;
+    cudaMallocHost((void **) &fromScale, dstHeight * dstWidth + 2 * dstHeightChroma * dstWidthChroma);
+    uint8_t** fromScalePtrs = static_cast<uint8_t**>(malloc(3 * sizeof(uint8_t*)));
+    fromScalePtrs[0] = fromScale;
+    fromScalePtrs[1] = fromScalePtrs[0] + dstHeight * dstWidth;
+    fromScalePtrs[2] = fromScalePtrs[1] + dstHeightChroma * dstWidthChroma;
+
     // Scale each component
     if(operation == SWS_POINT || operation == SWS_BILINEAR){
-        scaleTexY << <lumaLP.first, lumaLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
-        scaleTexU << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[1]);
-        scaleTexV << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[2]);
-    } else if(operation == SWS_BICUBIC){
-        cubicScaleY << <lumaLP.first, lumaLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
-        cubicScaleU << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[1]);
-        cubicScaleV << <chromaLP.first, chromaLP.second >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice[2]);
+        cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
+        scaleTexY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
+        cudaMemcpyAsync(fromScalePtrs[0], scaledDevice, dstHeight * dstWidth, cudaMemcpyDeviceToHost, streamY);
+
+        cudaMemcpyToArrayAsync(uSrc, 0, 0, toScalePtrs[1], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamU);
+        scaleTexU << <chromaLP.first, chromaLP.second, 0, streamU >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom0);
+        cudaMemcpyAsync(fromScalePtrs[1], scaledDevice + offsetFrom0, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamU);
+
+        cudaMemcpyToArrayAsync(vSrc, 0, 0, toScalePtrs[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamV);
+        scaleTexV << <chromaLP.first, chromaLP.second, 0, streamV >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom1);
+        cudaMemcpyAsync(fromScalePtrs[2], scaledDevice + offsetFrom1, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamV);
     } else{
-        lanczosScaleY << <lumaLP.first, lumaLP.second >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice[0]);
+        cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
+        cubicScaleY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
+        cudaMemcpyAsync(fromScalePtrs[0], scaledDevice, dstHeight * dstWidth, cudaMemcpyDeviceToHost, streamY);
+
+        cudaMemcpyToArrayAsync(uSrc, 0, 0, toScalePtrs[1], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamU);
+        cubicScaleU << <chromaLP.first, chromaLP.second, 0, streamU >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom0);
+        cudaMemcpyAsync(fromScalePtrs[1], scaledDevice + offsetFrom0, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamU);
+
+        cudaMemcpyToArrayAsync(vSrc, 0, 0, toScalePtrs[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamV);
+        cubicScaleV << <chromaLP.first, chromaLP.second, 0, streamV >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom1);
+        cudaMemcpyAsync(fromScalePtrs[2], scaledDevice + offsetFrom1, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamV);
     }
 
-    // Free cuda arrays
-    cudaFreeArray(yArray);
-    cudaFreeArray(uArray);
-    cudaFreeArray(vArray);
+    // Synchronize device
+    cudaDeviceSynchronize();
 
-    // Temporary buffer
-    uint8_t** scaleFormatResized;
-    // Allocate channel buffer pointers
-    allocBuffers(scaleFormatResized, dstWidth, dstHeightChroma, scaleFormat);
-
-    // Copy resulting data from device
-    cudaCopyBuffersFromGPU(scaleFormatResized, scaledDevice, scaledDeviceSizes);
-
-    // Free device memory
-    freeCudaMemory(scaledDevice);
+    // Free used resources
+    free(toScalePtrs);
     free(scaledDeviceSizes);
 
-    // Format conversion operation
-    omp_formatConversion(dstWidth, dstHeight, scaleFormat, scaleFormatResized, dstFormat, dst->data);
+    cudaFree(scaledDevice);
+    
+    cudaFreeArray(ySrc);
+    cudaFreeArray(uSrc);
+    cudaFreeArray(vSrc);
+    
+    cudaFreeHost(toScale);
 
-    // Free last buffer resources
-    free2dBuffer(scaleFormatResized, 3);
+    // Format conversion operation
+    omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
+
+    // Free used resources
+    free(fromScalePtrs);
+    cudaFreeHost(fromScale);
 
     // Sucess
     return;
