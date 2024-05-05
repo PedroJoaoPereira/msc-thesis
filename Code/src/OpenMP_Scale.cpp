@@ -1,13 +1,13 @@
-#include "OpenMP_Scale.h"
+#include "Sequential_Scale.h"
 
-// Resampler sequential method
+// Resampler openmp method
 int openmp_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
-                  int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]);
+                         int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]);
 
 // Sequential scale method
 int openmp_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
-              int dstWidth, int dstHeight, uint8_t* dstSlice,
-              int operation);
+                     int dstWidth, int dstHeight, uint8_t* dstSlice,
+                     int operation);
 
 // Prepares the scaling operation
 int openmp_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
@@ -39,7 +39,7 @@ int openmp_scale(ImageInfo src, ImageInfo dst, int operation){
     // Verify if it is only a resample operation
     if(src.width == dst.width && src.height == dst.height){
         if(openmp_resampler(src.width, src.height, src.pixelFormat, src.frame->data, src.frame->linesize,
-                         dst.width, dst.height, dst.pixelFormat, dst.frame->data, dst.frame->linesize) < 0)
+                                dst.width, dst.height, dst.pixelFormat, dst.frame->data, dst.frame->linesize) < 0)
             return -1;
     } else{
         // Apply the scaling operation
@@ -59,30 +59,223 @@ int openmp_scale(ImageInfo src, ImageInfo dst, int operation){
 }
 
 int openmp_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, uint8_t* srcSlice[], int srcStride[],
-                  int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]){
+                         int dstWidth, int dstHeight, AVPixelFormat dstPixelFormat, uint8_t* dstSlice[], int dstStride[]){
 
     // If same formats no need to resample
     if(srcPixelFormat == dstPixelFormat){
-        memcpy(dstSlice[0], srcSlice[0], srcStride[0] * srcHeight);
-        memcpy(dstSlice[1], srcSlice[1], srcStride[1] * srcHeight);
-        memcpy(dstSlice[2], srcSlice[2], srcStride[2] * srcHeight);
-        memcpy(dstSlice[3], srcSlice[3], srcStride[3] * srcHeight);
+        // Calculate the chroma size depending on the source data pixel format
+        float tempWidthRatio = 1.f;
+        float tempHeightRatio = 1.f;
+        if(srcPixelFormat == AV_PIX_FMT_YUV422P || srcPixelFormat == AV_PIX_FMT_YUV420P)
+            tempWidthRatio = 0.5f;
+        if(srcPixelFormat == AV_PIX_FMT_YUV420P)
+            tempHeightRatio = 0.5f;
+
+        // Copy data between buffers
+        memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
+        memcpy(dstSlice[1], srcSlice[1], srcWidth * srcHeight * tempWidthRatio * tempHeightRatio);
+        memcpy(dstSlice[2], srcSlice[2], srcWidth * srcHeight * tempWidthRatio * tempHeightRatio);
+
+        // Success
         return 0;
     }
 
     // REORGANIZE COMPONENTS -------------------------
-    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
-        // Calculate once
-        long numElements = srcStride[0] * srcHeight;
+    if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_RGB24){
+        // Number of elements
+        long numElements = srcWidth * srcHeight;
 
         // Loop through each pixel
-        #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index += 4){
-            dstSlice[0][index / 2] = srcSlice[0][index + 1];        // Ya
-            dstSlice[0][index / 2 + 1] = srcSlice[0][index + 3];    // Yb
+        for(int index = 0; index < numElements; index++){
+            // Calculate once
+            int indexMul3 = index * 3;
 
-            dstSlice[1][index / 4] = srcSlice[0][index];            // U
-            dstSlice[2][index / 4] = srcSlice[0][index + 2];        // V
+            float y = static_cast<float>(srcSlice[0][index]);	// Y
+            float u = static_cast<float>(srcSlice[1][index]);	// U
+            float v = static_cast<float>(srcSlice[2][index]);	// V
+
+            float r = y + 1.402f * (v - 128.f);							// R
+            float g = y - 0.344f * (u - 128.f) - 0.714f * (v - 128.f);	// G
+            float b = y + 1.772f * (u - 128.f);							// B
+
+            // Clamp values to avoid overshooting and undershooting
+            clamp(r, 0.f, 255.f);
+            clamp(g, 0.f, 255.f);
+            clamp(b, 0.f, 255.f);
+
+            dstSlice[0][indexMul3] = float2uint8_t(r);		// R
+            dstSlice[0][indexMul3 + 1] = float2uint8_t(g);	// G
+            dstSlice[0][indexMul3 + 2] = float2uint8_t(b);	// B
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Number of elements
+        long numElements = srcWidth * srcHeight;
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], numElements);
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index += 2){
+            // Calculate once
+            int indexAdd1 = index + 1;
+            int indexDiv2 = index / 2;
+
+            float u1 = static_cast<float>(srcSlice[1][index]);		// U1
+            float v1 = static_cast<float>(srcSlice[2][index]);		// V1
+
+            float u2 = static_cast<float>(srcSlice[1][indexAdd1]);	// U2
+            float v2 = static_cast<float>(srcSlice[2][indexAdd1]);	// V2
+
+            dstSlice[1][indexDiv2] = float2uint8_t((u1 + u2) / 2.f);
+            dstSlice[2][indexDiv2] = float2uint8_t((v1 + v2) / 2.f);
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
+
+        // Loop through each pixel
+        for(int lin = 0; lin < srcHeight; lin += 2){
+            // Calculate once
+            int linIndexTop = lin * srcWidth;
+            int linIndexBottom = linIndexTop + srcWidth;
+
+            for(int col = 0; col < srcWidth; col += 2){
+                // Calculate once
+                int colIndexLeft = col;
+                int colIndexRight = colIndexLeft + 1;
+
+                int index1 = linIndexTop + colIndexLeft;
+                float u1 = static_cast<float>(srcSlice[1][index1]);	// U1
+                float v1 = static_cast<float>(srcSlice[2][index1]);	// V1
+
+                int index2 = linIndexTop + colIndexRight;
+                float u2 = static_cast<float>(srcSlice[1][index2]);	// U2
+                float v2 = static_cast<float>(srcSlice[2][index2]);	// V2
+
+                int index3 = linIndexBottom + colIndexLeft;
+                float u3 = static_cast<float>(srcSlice[1][index3]);	// U3
+                float v3 = static_cast<float>(srcSlice[2][index3]);	// V3
+
+                int index4 = linIndexBottom + colIndexRight;
+                float u4 = static_cast<float>(srcSlice[1][index4]);	// U4
+                float v4 = static_cast<float>(srcSlice[2][index4]);	// V4
+
+                int indexFinal = (lin / 2) * (srcWidth / 2) + (col / 2);
+                dstSlice[1][indexFinal] = float2uint8_t((u1 + u2 + u3 + u4) / 4.f);
+                dstSlice[2][indexFinal] = float2uint8_t((v1 + v2 + v3 + v4) / 4.f);
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Number of elements
+        long numElements = srcWidth * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index += 2){
+            // Calculate once
+            int indexAdd1 = index + 1;
+            int indexMul2 = index * 2;
+
+            float u1 = static_cast<float>(srcSlice[1][index]);		// U1
+            float v1 = static_cast<float>(srcSlice[2][index]);		// V1
+
+            float u2 = static_cast<float>(srcSlice[1][indexAdd1]);	// U2
+            float v2 = static_cast<float>(srcSlice[2][indexAdd1]);	// V2
+
+            dstSlice[0][indexMul2] = float2uint8_t((u1 + u2) / 2.f);
+            dstSlice[0][indexMul2 + 1] = srcSlice[0][index];
+            dstSlice[0][indexMul2 + 2] = float2uint8_t((v1 + v2) / 2.f);
+            dstSlice[0][indexMul2 + 3] = srcSlice[0][indexAdd1];
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV444P && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
+
+        // Calculate once
+        int widthDiv2 = srcWidth / 2;
+
+        // Loop through each pixel
+        for(int lin = 0; lin < srcHeight; lin += 2){
+            // Calculate once
+            int linIndexTop = lin * srcWidth;
+            int linIndexBottom = linIndexTop + srcWidth;
+
+            for(int col = 0; col < srcWidth; col += 2){
+                // Calculate once
+                int colIndexLeft = col;
+                int colIndexRight = colIndexLeft + 1;
+
+                int index1 = linIndexTop + colIndexLeft;
+                float u1 = static_cast<float>(srcSlice[1][index1]);	// U1
+                float v1 = static_cast<float>(srcSlice[2][index1]);	// V1
+
+                int index2 = linIndexTop + colIndexRight;
+                float u2 = static_cast<float>(srcSlice[1][index2]);	// U2
+                float v2 = static_cast<float>(srcSlice[2][index2]);	// V2
+
+                int index3 = linIndexBottom + colIndexLeft;
+                float u3 = static_cast<float>(srcSlice[1][index3]);	// U3
+                float v3 = static_cast<float>(srcSlice[2][index3]);	// V3
+
+                int index4 = linIndexBottom + colIndexRight;
+                float u4 = static_cast<float>(srcSlice[1][index4]);	// U4
+                float v4 = static_cast<float>(srcSlice[2][index4]);	// V4
+
+                int indexFinal = lin * widthDiv2 + col;
+                dstSlice[1][indexFinal] = float2uint8_t((u1 + u2 + u3 + u4) / 4.f);
+                dstSlice[1][indexFinal + 1] = float2uint8_t((v1 + v2 + v3 + v4) / 4.f);
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Calculate once
+        int widthDiv2 = srcWidth / 2;
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
+
+        // Loop through each pixel
+        for(int lin = 0; lin < srcHeight; lin += 2){
+            // Calculate once
+            int linIndexTop = lin * widthDiv2;
+            int linIndexBottom = linIndexTop + widthDiv2;
+
+            for(int col = 0; col < widthDiv2; col++){
+                int index1 = linIndexTop + col;
+                float u1 = static_cast<float>(srcSlice[1][index1]);	// U1
+                float v1 = static_cast<float>(srcSlice[2][index1]);	// V1
+
+                int index2 = linIndexBottom + col;
+                float u2 = static_cast<float>(srcSlice[1][index2]);	// U2
+                float v2 = static_cast<float>(srcSlice[2][index2]);	// V2
+
+                int indexFinal = (lin / 2) * widthDiv2 + col;
+                dstSlice[1][indexFinal] = float2uint8_t((u1 + u2) / 2.f);
+                dstSlice[2][indexFinal] = float2uint8_t((v1 + v2) / 2.f);
+            }
         }
 
         // Success
@@ -90,17 +283,230 @@ int openmp_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
     }
 
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
+        // Number of elements
+        long numElements = srcWidth * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index += 2){
+            // Calculate once
+            int indexMul2 = index * 2;
+            int indexDiv2 = index / 2;
+
+            dstSlice[0][indexMul2 + 1] = srcSlice[0][index];        // Ya
+            dstSlice[0][indexMul2 + 3] = srcSlice[0][index + 1];    // Yb
+
+            dstSlice[0][indexMul2] = srcSlice[1][indexDiv2];        // U
+            dstSlice[0][indexMul2 + 2] = srcSlice[2][indexDiv2];    // V
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_NV12){
         // Calculate once
+        int widthDiv2 = srcWidth / 2;
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], srcWidth * srcHeight);
+
+        // Loop through each pixel
+        for(int lin = 0; lin < srcHeight; lin += 2){
+            // Calculate once
+            int linIndexTop = lin * widthDiv2;
+            int linIndexBottom = linIndexTop + widthDiv2;
+
+            for(int col = 0; col < widthDiv2; col++){
+                int index1 = linIndexTop + col;
+                float u1 = static_cast<float>(srcSlice[1][index1]);	// U1
+                float v1 = static_cast<float>(srcSlice[2][index1]);	// V1
+
+                int index2 = linIndexBottom + col;
+                float u2 = static_cast<float>(srcSlice[1][index2]);	// U2
+                float v2 = static_cast<float>(srcSlice[2][index2]);	// V2
+
+                int indexFinal = lin * widthDiv2 + col * 2;
+                dstSlice[1][indexFinal] = float2uint8_t((u1 + u2) / 2.f);
+                dstSlice[1][indexFinal + 1] = float2uint8_t((v1 + v2) / 2.f);
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV422P){
+        // Number of elements
         long numElements = srcStride[0] * srcHeight;
 
         // Loop through each pixel
-        #pragma omp parallel for schedule(static)
-        for(int index = 0; index < numElements; index += 2){
-            dstSlice[0][index * 2 + 1] = srcSlice[0][index];        // Ya
-            dstSlice[0][index * 2 + 3] = srcSlice[0][index + 1];    // Yb
+        for(int index = 0; index < numElements; index += 4){
+            // Calculate once
+            int indexDiv2 = index / 2;
+            int indexDiv4 = index / 4;
 
-            dstSlice[0][index * 2] = srcSlice[1][index / 2];        // U
-            dstSlice[0][index * 2 + 2] = srcSlice[2][index / 2];    // V
+            dstSlice[0][indexDiv2] = srcSlice[0][index + 1];        // Ya
+            dstSlice[0][indexDiv2 + 1] = srcSlice[0][index + 3];    // Yb
+
+            dstSlice[1][indexDiv4] = srcSlice[0][index];            // U
+            dstSlice[2][indexDiv4] = srcSlice[0][index + 2];        // V
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Loop through each pixel
+        for(int lin = 0; lin < srcHeight; lin += 2){
+            // Calculate once
+            int linIndexTop = lin * srcStride[0];
+            int linIndexBottom = linIndexTop + srcStride[0];
+
+            for(int col = 0; col < srcStride[0]; col += 4){
+                // Calculate once
+                int colDiv2 = col / 2;
+
+                int index1 = linIndexTop + col;
+                float u1 = static_cast<float>(srcSlice[0][index1]);			// U1
+                float ya1 = static_cast<float>(srcSlice[0][index1 + 1]);	// Ya1
+                float v1 = static_cast<float>(srcSlice[0][index1 + 2]);		// V1
+                float yb1 = static_cast<float>(srcSlice[0][index1 + 3]);	// Yb1
+
+                int index2 = linIndexBottom + col;
+                float u2 = static_cast<float>(srcSlice[0][index2]);			// U2
+                float ya2 = static_cast<float>(srcSlice[0][index2 + 1]);	// Ya2
+                float v2 = static_cast<float>(srcSlice[0][index2 + 2]);		// V2
+                float yb2 = static_cast<float>(srcSlice[0][index2 + 3]);	// Yb2
+
+                int indexFinalTop = linIndexTop / 2 + colDiv2;
+                int indexFinalBottom = linIndexBottom / 2 + colDiv2;
+                dstSlice[0][indexFinalTop] = ya1;
+                dstSlice[0][indexFinalTop + 1] = yb1;
+                dstSlice[0][indexFinalBottom] = ya2;
+                dstSlice[0][indexFinalBottom + 1] = yb2;
+
+                int indexFinalTopChroma = linIndexTop / 8 + col / 4;
+                dstSlice[1][indexFinalTopChroma] = float2uint8_t((u1 + u2) / 2.f);
+                dstSlice[2][indexFinalTopChroma] = float2uint8_t((v1 + v2) / 2.f);
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Loop through each pixel
+        for(int lin = 0; lin < srcHeight; lin += 2){
+            // Calculate once
+            int linIndexTop = lin * srcStride[0];
+            int linIndexBottom = linIndexTop + srcStride[0];
+
+            for(int col = 0; col < srcStride[0]; col += 4){
+                // Calculate once
+                int colDiv2 = col / 2;
+
+                int index1 = linIndexTop + col;
+                float u1 = static_cast<float>(srcSlice[0][index1]);			// U1
+                float ya1 = static_cast<float>(srcSlice[0][index1 + 1]);	// Ya1
+                float v1 = static_cast<float>(srcSlice[0][index1 + 2]);		// V1
+                float yb1 = static_cast<float>(srcSlice[0][index1 + 3]);	// Yb1
+
+                int index2 = linIndexBottom + col;
+                float u2 = static_cast<float>(srcSlice[0][index2]);			// U2
+                float ya2 = static_cast<float>(srcSlice[0][index2 + 1]);	// Ya2
+                float v2 = static_cast<float>(srcSlice[0][index2 + 2]);		// V2
+                float yb2 = static_cast<float>(srcSlice[0][index2 + 3]);	// Yb2
+
+                int indexFinalTop = linIndexTop / 2 + colDiv2;
+                int indexFinalBottom = linIndexBottom / 2 + colDiv2;
+                dstSlice[0][indexFinalTop] = ya1;
+                dstSlice[0][indexFinalTop + 1] = yb1;
+                dstSlice[0][indexFinalBottom] = ya2;
+                dstSlice[0][indexFinalBottom + 1] = yb2;
+
+                int indexFinalTopChroma = linIndexTop / 4 + colDiv2;
+                dstSlice[1][indexFinalTopChroma] = float2uint8_t((u1 + u2) / 2.f);
+                dstSlice[1][indexFinalTopChroma + 1] = float2uint8_t((v1 + v2) / 2.f);
+            }
+        }
+
+        // Success
+        return 0;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_YUV420P){
+        // Number of elements
+        long numElements = srcStride[0] * srcHeight;
+        long numElementsDiv2 = numElements / 2;
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], numElements);
+
+        // Loop through each pixel chroma 
+        for(int index = 0; index < numElementsDiv2; index += 2){
+            // Calculate once
+            int indexDiv2 = index / 2;
+
+            dstSlice[1][indexDiv2] = srcSlice[1][index];        // U
+            dstSlice[2][indexDiv2] = srcSlice[1][index + 1];    // V
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Number of elements
+        long numElements = srcStride[0] * srcHeight;
+        long numElementsDiv4 = numElements / 4;
+
+        // Luma plane is the same
+        memcpy(dstSlice[0], srcSlice[0], numElements);
+
+        // Loop through each pixel chroma 
+        for(int index = 0; index < numElementsDiv4; index++){
+            // Calculate once
+            int indexMul2 = index * 2;
+
+            dstSlice[1][indexMul2] = srcSlice[1][index];        // U
+            dstSlice[1][indexMul2 + 1] = srcSlice[2][index];    // V
+        }
+
+        // Success
+        return 0;
+    }
+
+    if(srcPixelFormat == AV_PIX_FMT_RGB24 && dstPixelFormat == AV_PIX_FMT_YUV444P){
+        // Number of elements
+        long numElements = srcStride[0] * srcHeight;
+
+        // Loop through each pixel
+        for(int index = 0; index < numElements; index++){
+            // Calculate once
+            int indexDiv3 = index / 3;
+
+            float r = static_cast<float>(srcSlice[0][index]);	// R
+            float g = static_cast<float>(srcSlice[0][++index]);	// G
+            float b = static_cast<float>(srcSlice[0][++index]);	// B
+
+            dstSlice[0][indexDiv3] = float2uint8_t(0.299f * r + 0.587f * g + 0.114f * b);			// Y
+            dstSlice[1][indexDiv3] = float2uint8_t(-0.169f * r - 0.331f * g + 0.499f * b + 128.f);	// U
+            dstSlice[2][indexDiv3] = float2uint8_t(0.499f * r - 0.418f * g - 0.0813f * b + 128.f);	// V
         }
 
         // Success
@@ -112,8 +518,8 @@ int openmp_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
 }
 
 int openmp_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
-              int dstWidth, int dstHeight, uint8_t* dstSlice,
-              int operation){
+                     int dstWidth, int dstHeight, uint8_t* dstSlice,
+                     int operation){
 
     // Get scale ratios
     float scaleHeightRatio = static_cast<float>(dstHeight) / srcHeight;
@@ -121,7 +527,6 @@ int openmp_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
 
     if(operation == SWS_BILINEAR){
         // Iterate through each line of the scaled image
-        #pragma omp parallel for schedule(guided)
         for(int lin = 0; lin < dstHeight; lin++){
             // Scaled image line coordinates in the original image
             float linOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio - 0.5f;
@@ -185,7 +590,6 @@ int openmp_scale(int srcWidth, int srcHeight, uint8_t* srcSlice,
 
     if(operation == SWS_BICUBIC){
         // Iterate through each line of the scaled image
-        #pragma omp parallel for schedule(guided)
         for(int lin = 0; lin < dstHeight; lin++){
             // Scaled image line coordinates in the original image
             float linOriginal = (static_cast<float>(lin) + 0.5f) / scaleHeightRatio;
@@ -251,9 +655,15 @@ int openmp_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
 
     // Variables used
     int retVal = -1;
-    AVPixelFormat scalingSupportedFormat = AV_PIX_FMT_YUV422P;
     uint8_t* resampleTempFrameBuffer, *scaleTempFrameBuffer;
     AVFrame* resampleTempFrame, *scaleTempFrame;
+
+    // Retrieve the temporary scaling pixel format
+    AVPixelFormat scalingSupportedFormat = getTempScaleFormat(srcPixelFormat);
+    if(scalingSupportedFormat == AV_PIX_FMT_NONE){
+        cerr << "Source pixel format is not supported" << endl;
+        return -1;
+    }
 
     // Prepare to initialize resampleTempFrame
     retVal = createImageDataBuffer(srcWidth, srcHeight, scalingSupportedFormat, &resampleTempFrameBuffer);
@@ -269,7 +679,7 @@ int openmp_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
 
     // Resamples image to a supported format
     retVal = openmp_resampler(srcWidth, srcHeight, srcPixelFormat, srcSlice, srcStride,
-                           srcWidth, srcHeight, scalingSupportedFormat, resampleTempFrame->data, resampleTempFrame->linesize);
+                                  srcWidth, srcHeight, scalingSupportedFormat, resampleTempFrame->data, resampleTempFrame->linesize);
     if(retVal < 0){
         av_frame_free(&resampleTempFrame);
         free(resampleTempFrameBuffer);
@@ -293,30 +703,53 @@ int openmp_scale_aux(int srcWidth, int srcHeight, AVPixelFormat srcPixelFormat, 
         return retVal;
     }
 
-    // Apply the scaling operation
-    for(int colorChannel = 0; colorChannel < 3; colorChannel++){
-        if(colorChannel == 0){
-            retVal = openmp_scale(srcWidth, srcHeight, resampleTempFrame->data[0],
-                               dstWidth, dstHeight, scaleTempFrame->data[0],
-                               operation);
-        } else{
-            retVal = openmp_scale(srcWidth / 2, srcHeight, resampleTempFrame->data[colorChannel],
-                               dstWidth / 2, dstHeight, scaleTempFrame->data[colorChannel],
-                               operation);
-        }
+    // Apply the scaling operation to the luma component
+    retVal = openmp_scale(srcWidth, srcHeight, resampleTempFrame->data[0],
+                              dstWidth, dstHeight, scaleTempFrame->data[0],
+                              operation);
+    if(retVal < 0){
+        av_frame_free(&resampleTempFrame);
+        free(resampleTempFrameBuffer);
+        av_frame_free(&scaleTempFrame);
+        free(scaleTempFrameBuffer);
+        return retVal;
+    }
 
-        if(retVal < 0){
-            av_frame_free(&resampleTempFrame);
-            free(resampleTempFrameBuffer);
-            av_frame_free(&scaleTempFrame);
-            free(scaleTempFrameBuffer);
-            return retVal;
-        }
+    // Calculate the chroma size depending on the source data pixel format
+    float tempWidthRatio = 1.f;
+    float tempHeightRatio = 1.f;
+    if(scalingSupportedFormat == AV_PIX_FMT_YUV422P || scalingSupportedFormat == AV_PIX_FMT_YUV420P)
+        tempWidthRatio = 0.5f;
+    if(scalingSupportedFormat == AV_PIX_FMT_YUV420P)
+        tempHeightRatio = 0.5f;
+
+    // Apply the scaling operation to the second chroma component
+    retVal = openmp_scale(static_cast<int>(srcWidth * tempWidthRatio), static_cast<int>(srcHeight * tempHeightRatio), resampleTempFrame->data[1],
+                              static_cast<int>(dstWidth * tempWidthRatio), static_cast<int>(dstHeight * tempHeightRatio), scaleTempFrame->data[1],
+                              operation);
+    if(retVal < 0){
+        av_frame_free(&resampleTempFrame);
+        free(resampleTempFrameBuffer);
+        av_frame_free(&scaleTempFrame);
+        free(scaleTempFrameBuffer);
+        return retVal;
+    }
+
+    // Apply the scaling operation to the third chroma component
+    retVal = openmp_scale(static_cast<int>(srcWidth * tempWidthRatio), static_cast<int>(srcHeight * tempHeightRatio), resampleTempFrame->data[2],
+                              static_cast<int>(dstWidth * tempWidthRatio), static_cast<int>(dstHeight * tempHeightRatio), scaleTempFrame->data[2],
+                              operation);
+    if(retVal < 0){
+        av_frame_free(&resampleTempFrame);
+        free(resampleTempFrameBuffer);
+        av_frame_free(&scaleTempFrame);
+        free(scaleTempFrameBuffer);
+        return retVal;
     }
 
     // Resamples results to the desired one
     retVal = openmp_resampler(dstWidth, dstHeight, scalingSupportedFormat, scaleTempFrame->data, scaleTempFrame->linesize,
-                           dstWidth, dstHeight, dstPixelFormat, dstSlice, dstStride);
+                                  dstWidth, dstHeight, dstPixelFormat, dstSlice, dstStride);
     if(retVal < 0){
         av_frame_free(&resampleTempFrame);
         free(resampleTempFrameBuffer);
