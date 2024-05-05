@@ -88,7 +88,7 @@ int simulator_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForma
 
 // Precalculate coefficients
 template <class PrecisionType>
-int simulator_preCalculateCoefficients(int srcSize, int dstSize, int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs){
+int simulator_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs){
     // Calculate number of lines of coefficients
     int preCalcCoefSize = lcm(srcSize, dstSize) / min(srcSize, dstSize);
 
@@ -118,6 +118,9 @@ int simulator_preCalculateCoefficients(int srcSize, int dstSize, int pixelSuppor
         for(int index = 0; index < pixelSupportDiv2; index++){
             preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = coefFunc(upperCoef + index * sizeRatio);
             preCalculatedCoefs[lin][index + pixelSupportDiv2] = coefFunc(bottomtCoef + index * sizeRatio);
+
+            if(sizeRatio < 1 && operation == SWS_POINT)
+                preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] = static_cast<PrecisionType>(preCalculatedCoefs[lin][pixelSupportDiv2 - index - 1] == preCalculatedCoefs[lin][index + pixelSupportDiv2]);
         }
     }
 
@@ -268,9 +271,9 @@ int simulator_scale_aux(AVFrame* src, AVFrame* dst, int operation){
 
         // Create variables for precalculated coefficients
         PrecisionType** vCoefs;
-        int vCoefsSize = simulator_preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, pixelSupport, coefFunc, vCoefs);
+        int vCoefsSize = simulator_preCalculateCoefficients<PrecisionType>(srcHeight, dstHeight, operation, pixelSupport, coefFunc, vCoefs);
         PrecisionType** hCoefs;
-        int hCoefsSize = simulator_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, pixelSupport, coefFunc, hCoefs);
+        int hCoefsSize = simulator_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
 
         // Apply the resizing operation to each color channel
         for(int colorChannel = 0; colorChannel < 3; colorChannel++){

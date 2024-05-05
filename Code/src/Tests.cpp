@@ -18,6 +18,8 @@ string pixelFormatToString(int format){
             return "UYVY422";
         case AV_PIX_FMT_NV12:
             return "NV12";
+        case AV_PIX_FMT_NONE:
+            return "V210";
     }
 
     // Insuccess
@@ -100,6 +102,9 @@ void testFFMPEG(vector<ImageInfo*> &inImgs, vector<ImageInfo*> &outImgs, vector<
         for(int indexOut = 0; indexOut < outImgs.size(); indexOut++){
             // For each input image
             for(int indexIn = 0; indexIn < inImgs.size(); indexIn++){
+                if((*inImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_NONE || (*outImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_NONE)
+                    continue;
+
                 if(testFFMPEGAverage((*inImgs.at(indexIn)), (*outImgs.at(indexOut)), operations.at(indexOp), nTimes) < 0)
                     return;
             }

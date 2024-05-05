@@ -110,6 +110,11 @@ PrecisionType BicubicCoefficient(PrecisionType val);
 template <class PrecisionType>
 PrecisionType MitchellCoefficient(PrecisionType val);
 
+// PrecisionType val    - distance value to calculate coefficient from
+// Calculate Lanczos interpolation coefficient from a distance
+template <class PrecisionType>
+PrecisionType LanczosCoefficient(PrecisionType val);
+
 // Include template methods implementations
 #include "Common.hpp"
 

@@ -20,8 +20,11 @@ bool isSupportedFormat(AVPixelFormat format){
     // Verify if supported format
     switch(format){
         case AV_PIX_FMT_YUV444P:
-        case AV_PIX_FMT_GBRP:
+        case AV_PIX_FMT_UYVY422:
         case AV_PIX_FMT_YUV422P:
+        case AV_PIX_FMT_YUV420P:
+        case AV_PIX_FMT_NV12:
+        case AV_PIX_FMT_NONE: // V210
             return true;
     }
 
@@ -61,7 +64,7 @@ int getPixelSupport(int operation){
         case SWS_BICUBIC:
             return 4;
         case SWS_LANCZOS:
-            return 4;
+            return 6;
     }
 
     // Insuccess
@@ -136,32 +139,44 @@ int writeImageToFile(string fileName, AVFrame** frame){
         return -1;
     }
 
-    // Calculate the number of elements of the image
-    int numElements = avpicture_get_size((AVPixelFormat) (*frame)->format, (*frame)->width, (*frame)->height);
-    // Write resulting frame to a file
-    fwrite((*frame)->data[0], sizeof(uint8_t), numElements, outputFile);
+    if((AVPixelFormat) (*frame)->format == AV_PIX_FMT_NONE){ // V210
+        // Calculate the number of elements of the image
+        int numElements = (*frame)->width * (*frame)->height / 6 * 4;
+        // Write resulting frame to a file
+        fwrite((*frame)->data[0], sizeof(uint32_t), numElements, outputFile);
+    } else{
+        // Calculate the number of elements of the image
+        int numElements = avpicture_get_size((AVPixelFormat) (*frame)->format, (*frame)->width, (*frame)->height);
+        // Write resulting frame to a file
+        fwrite((*frame)->data[0], sizeof(uint8_t), numElements, outputFile);
+    }
 
     // Close file
     fclose(outputFile);
 
-    // Return number of elements written
-    return numElements;
+    // Success
+    return 1;
 }
 
 // Create data buffer to hold image
 int createImageDataBuffer(int width, int height, AVPixelFormat pixelFormat, uint8_t** dataBuffer){
     // Calculate the number of elements of the image
     int numElements = avpicture_get_size(pixelFormat, width, height);
+    if(pixelFormat == AV_PIX_FMT_NONE) // V210
+        numElements = avpicture_get_size(AV_PIX_FMT_UYVY422, width, height);
 
     // Allocate buffer of the frame
-    *dataBuffer = (uint8_t*) malloc(sizeof(uint8_t) * numElements);
+    if(pixelFormat == AV_PIX_FMT_NONE) // V210
+        *dataBuffer = static_cast<uint8_t*>(malloc(((width + 47) / 48) * 128 * height * sizeof(uint8_t)));
+    else
+        *dataBuffer = static_cast<uint8_t*>(malloc(numElements * sizeof(uint8_t)));
     if(!*dataBuffer){
         cout << "Could not allocate the buffer memory!" << endl;
         return -1;
     }
 
-    // Return the size of the allocated buffer
-    return numElements;
+    // Success
+    return 1;
 }
 
 // Initialize and transfer data to AVFrame
@@ -179,10 +194,14 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
     (*frame)->format = pixelFormat;
 
     // Fill frame->data and frame->linesize pointers
-    if(avpicture_fill((AVPicture*) *frame, *dataBuffer, pixelFormat, width, height) < 0){
-        av_frame_free(&(*frame));
-        cout << "Could not initialize frame!" << endl;
-        return -1;
+    if(pixelFormat == AV_PIX_FMT_NONE){ // V210
+        (*frame)->data[0] = (*dataBuffer);
+    } else{
+        if(avpicture_fill((AVPicture*) *frame, *dataBuffer, pixelFormat, width, height) < 0){
+            av_frame_free(&(*frame));
+            cout << "Could not initialize frame!" << endl;
+            return -1;
+        }
     }
 
     // Success
