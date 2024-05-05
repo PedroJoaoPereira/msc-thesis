@@ -385,7 +385,11 @@ void cuda_resampleStarter(AVFrame* src, AVFrame* dst, int operation,
     // Check if is only a format conversion
     if(srcWidth == dstWidth && srcHeight == dstHeight){
         // Format conversion operation
+        high_resolution_clock::time_point initTime, stopTime;
+        initTime = high_resolution_clock::now();
         omp_formatConversion(srcWidth, srcHeight, srcFormat, src->data, dstFormat, dst->data);
+        stopTime = high_resolution_clock::now();
+        times[0] = duration_cast<microseconds>(stopTime - initTime).count() * 1.;
         // End resample operation
         return;
     }

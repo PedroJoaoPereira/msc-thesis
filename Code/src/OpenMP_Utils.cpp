@@ -3,7 +3,8 @@
 // Convert the pixel format of the image
 void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* srcSlice[], int dstPixelFormat, uint8_t* dstSlice[]){
     // Get maximum number of threads to use
-    int nThreads = omp_get_max_threads() <= 2 ? omp_get_max_threads() : omp_get_max_threads() - 1;
+    int nThreads = omp_get_max_threads() <= 7 ? omp_get_max_threads() - 1 : 7;
+    nThreads == 0 ? 1 : nThreads;
 
 #pragma region UYVY422
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422){

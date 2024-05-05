@@ -85,8 +85,10 @@ int createImageDataBuffer(int width, int height, int pixelFormat, uint8_t** data
     // Allocate buffer of the frame
     if(pixelFormat == AV_PIX_FMT_V210)
         cudaMallocHost((void **) dataBuffer, ((width + 47) / 48) * 128 * height * sizeof(uint8_t));
+        //*dataBuffer = (uint8_t*) malloc(((width + 47) / 48) * 128 * height);
     else
         cudaMallocHost((void **) dataBuffer, numElements * sizeof(uint8_t));
+        //*dataBuffer = (uint8_t*) malloc(numElements);
     if(!*dataBuffer){
         cout << "Could not allocate the buffer memory!" << endl;
         return -1;
@@ -144,6 +146,7 @@ void ImageClass::loadImage(){
     if(isInitialized){
         av_frame_free(&frame);
         cudaFreeHost(frameBuffer);
+        //free(frameBuffer);
     } else
         isInitialized = true;
 
@@ -154,6 +157,7 @@ void ImageClass::loadImage(){
     // Initialize frame
     if(initializeAVFrame(&frameBuffer, width, height, pixelFormat, &frame) < 0){
         cudaFreeHost(frameBuffer);
+        //free(frameBuffer);
     }
 }
 
@@ -162,6 +166,7 @@ void ImageClass::initFrame(){
     if(isInitialized){
         av_frame_free(&frame);
         cudaFreeHost(frameBuffer);
+        //free(frameBuffer);
     }else
         isInitialized = true;
 
@@ -172,6 +177,7 @@ void ImageClass::initFrame(){
     // Initialize frame
     if(initializeAVFrame(&frameBuffer, width, height, pixelFormat, &frame) < 0){
         cudaFreeHost(frameBuffer);
+        //free(frameBuffer);
     }
 }
 
@@ -185,4 +191,5 @@ void ImageClass::writeImage(){
 void ImageClass::freeResources(){
     av_frame_free(&frame);
     cudaFreeHost(frameBuffer);
+    //free(frameBuffer);
 }
