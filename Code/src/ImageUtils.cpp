@@ -118,9 +118,15 @@ int getScaleFormat(int inFormat, int outFormat){
     // Retrieve the temporary scale format
     switch(inFormat){
     case AV_PIX_FMT_UYVY422:
-        return AV_PIX_FMT_YUV422P;
+        if(outFormat == AV_PIX_FMT_YUV420P || outFormat == AV_PIX_FMT_NV12)
+            return AV_PIX_FMT_YUV420P;
+        else
+            return AV_PIX_FMT_YUV422P;
     case AV_PIX_FMT_YUV422P:
-        return AV_PIX_FMT_YUV422P;
+        if(outFormat == AV_PIX_FMT_YUV420P || outFormat == AV_PIX_FMT_NV12)
+            return AV_PIX_FMT_YUV420P;
+        else
+            return AV_PIX_FMT_YUV422P;
     case AV_PIX_FMT_YUV420P:
         return AV_PIX_FMT_YUV420P;
     case AV_PIX_FMT_NV12:
