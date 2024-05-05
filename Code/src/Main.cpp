@@ -44,7 +44,7 @@ int main(){
     ImageInfo inImg = img_uyvy422_1920x1080;
     int dstWidth = 1920;
     int dstHeight = 1080;
-	AVPixelFormat dstFormat = AV_PIX_FMT_YUV420P;
+	AVPixelFormat dstFormat = AV_PIX_FMT_NV12;
 	int operation = SWS_BILINEAR;
 
     int maxTestTimes = 5;

@@ -356,18 +356,6 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 		return 0;
 	}
 
-
-
-
-
-
-
-
-
-
-
-
-
 	if (srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_YUV420P) {
 		// Loop through each pixel
 		for (int lin = 0; lin < srcHeight; lin += 2) {
@@ -376,6 +364,9 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 			int linIndexBottom = linIndexTop + srcStride[0];
 
 			for (int col = 0; col < srcStride[0]; col += 4) {
+                // Calculate once
+                int colDiv2 = col / 2;
+
 				int index1 = linIndexTop + col;
 				float u1 = static_cast<float>(srcSlice[0][index1]);			// U1
 				float ya1 = static_cast<float>(srcSlice[0][index1 + 1]);	// Ya1
@@ -388,14 +379,16 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 				float v2 = static_cast<float>(srcSlice[0][index2 + 2]);		// V2
 				float yb2 = static_cast<float>(srcSlice[0][index2 + 3]);	// Yb2
 
-				int indexFinalTop = linIndexTop + col / 2;
-				int indexFinalBottom = linIndexBottom + col / 2;
+				int indexFinalTop = linIndexTop / 2 + colDiv2;
+				int indexFinalBottom = linIndexBottom / 2 + colDiv2;
 				dstSlice[0][indexFinalTop] = ya1;
 				dstSlice[0][indexFinalTop + 1] = yb1;
 				dstSlice[0][indexFinalBottom] = ya2;
 				dstSlice[0][indexFinalBottom + 1] = yb2;
-				//dstSlice[1][indexFinal] = float2uint8_t((u1 + u2) / 2.f);
-				//dstSlice[2][indexFinal] = float2uint8_t((v1 + v2) / 2.f);
+
+                int indexFinalTopChroma = linIndexTop / 8 + col / 4;
+                dstSlice[1][indexFinalTopChroma] = float2uint8_t((u1 + u2) / 2.f);
+                dstSlice[2][indexFinalTopChroma] = float2uint8_t((v1 + v2) / 2.f);
 			}
 		}
 
@@ -403,7 +396,45 @@ int sequential_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForm
 		return 0;
 	}
 
+    if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_NV12){
+        // Loop through each pixel
+        for(int lin = 0; lin < srcHeight; lin += 2){
+            // Calculate once
+            int linIndexTop = lin * srcStride[0];
+            int linIndexBottom = linIndexTop + srcStride[0];
 
+            for(int col = 0; col < srcStride[0]; col += 4){
+                // Calculate once
+                int colDiv2 = col / 2;
+
+                int index1 = linIndexTop + col;
+                float u1 = static_cast<float>(srcSlice[0][index1]);			// U1
+                float ya1 = static_cast<float>(srcSlice[0][index1 + 1]);	// Ya1
+                float v1 = static_cast<float>(srcSlice[0][index1 + 2]);		// V1
+                float yb1 = static_cast<float>(srcSlice[0][index1 + 3]);	// Yb1
+
+                int index2 = linIndexBottom + col;
+                float u2 = static_cast<float>(srcSlice[0][index2]);			// U2
+                float ya2 = static_cast<float>(srcSlice[0][index2 + 1]);	// Ya2
+                float v2 = static_cast<float>(srcSlice[0][index2 + 2]);		// V2
+                float yb2 = static_cast<float>(srcSlice[0][index2 + 3]);	// Yb2
+
+                int indexFinalTop = linIndexTop / 2 + colDiv2;
+                int indexFinalBottom = linIndexBottom / 2 + colDiv2;
+                dstSlice[0][indexFinalTop] = ya1;
+                dstSlice[0][indexFinalTop + 1] = yb1;
+                dstSlice[0][indexFinalBottom] = ya2;
+                dstSlice[0][indexFinalBottom + 1] = yb2;
+
+                int indexFinalTopChroma = linIndexTop / 4 + colDiv2;
+                dstSlice[1][indexFinalTopChroma] = float2uint8_t((u1 + u2) / 2.f);
+                dstSlice[1][indexFinalTopChroma + 1] = float2uint8_t((v1 + v2) / 2.f);
+            }
+        }
+
+        // Success
+        return 0;
+    }
 
 
 
