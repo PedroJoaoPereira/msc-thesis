@@ -2,14 +2,25 @@
 
 // Convert the pixel format of the image
 void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* srcSlice[], int dstPixelFormat, uint8_t* dstSlice[]){
-    #pragma region UYVY422
+    // Get maximum number of threads to use
+    int nThreads = omp_get_max_threads() <= 2 ? omp_get_max_threads() : omp_get_max_threads() - 1;
+
+#pragma region UYVY422
     if(srcPixelFormat == AV_PIX_FMT_UYVY422 && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Used metrics
         int vStrideUYVY422 = height;
         int hStrideUYVY422 = width * 2;
 
-        // Copy data
-        memcpy(dstSlice[0], srcSlice[0], vStrideUYVY422 * hStrideUYVY422);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
+            // Discover buffer pointers
+            auto src = srcSlice[0] + vIndex * hStrideUYVY422;
+            auto dst = dstSlice[0] + vIndex * hStrideUYVY422;
+
+            for(int hIndex = 0; hIndex < hStrideUYVY422; hIndex++){
+                *dst++ = *src++;
+            }
+        }
 
         return;
     }
@@ -22,7 +33,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideYUV422P = width;
 
         // Iterate blocks of 1x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * hStrideUYVY422;
@@ -49,7 +60,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideYUV420P = width;
 
         // Iterate blocks of 2x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * hStrideUYVY422 * 2;
@@ -66,13 +77,13 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 uint8_t v0 = *srcB++; // V0
                 uint8_t y1 = *srcB++; // Y1
 
-                                      // Get below line
+                // Get below line
                 *srcBb++; // U0
                 uint8_t y0b = *srcBb++; // Y0
                 *srcBb++; // V0
                 uint8_t y1b = *srcBb++; // Y1
 
-                                        // Assign above luma values
+                // Assign above luma values
                 *dstB++ = y0;
                 *dstB++ = y1;
 
@@ -97,7 +108,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideNV12 = width;
 
         // Iterate blocks of 2x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideUYVY422 / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * hStrideUYVY422 * 2;
@@ -113,13 +124,13 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 uint8_t v0 = *srcB++; // V0
                 uint8_t y1 = *srcB++; // Y1
 
-                                      // Get below line
+                // Get below line
                 *srcBb++; // U0
                 uint8_t y0b = *srcBb++; // Y0
                 *srcBb++; // V0
                 uint8_t y1b = *srcBb++; // Y1
 
-                                        // Assign above luma values
+                // Assign above luma values
                 *dstB++ = y0;
                 *dstB++ = y1;
 
@@ -144,7 +155,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideV210 = width / 6 * 4;
 
         // Iterate blocks of 1x12 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideUYVY422; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * hStrideUYVY422;
@@ -167,7 +178,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 auto v2 = *srcB++ << 2U; // V2
                 auto y5 = *srcB++ << 2U; // Y5
 
-                                         // Assign value
+                // Assign value
                 *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
                 *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
                 *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
@@ -177,9 +188,9 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         return;
     }
-    #pragma endregion
+#pragma endregion
 
-    #pragma region YUV422P
+#pragma region YUV422P
     if(srcPixelFormat == AV_PIX_FMT_YUV422P && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Used metrics
         int vStrideYUV422P = height;
@@ -188,7 +199,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideUYVY422 = width * 2;
 
         // Iterate blocks of 1x2 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
@@ -212,10 +223,25 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int vStrideYUV422P = height;
         int hStrideYUV422P = width;
 
-        // Copy data
-        memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
-        memcpy(dstSlice[1], srcSlice[1], vStrideYUV422P * hStrideYUV422P / 2);
-        memcpy(dstSlice[2], srcSlice[2], vStrideYUV422P * hStrideYUV422P / 2);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
+            // Discover buffer pointers
+            auto src = srcSlice[0] + vIndex * hStrideYUV422P;
+            auto dst = dstSlice[0] + vIndex * hStrideYUV422P;
+
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV422P / 2;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV422P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV422P / 2;
+
+            for(int hIndex = 0; hIndex < hStrideYUV422P / 2; hIndex++){
+                *dst++ = *src++;
+                *dst++ = *src++;
+
+                *dstU++ = *srcU++;
+                *dstV++ = *srcV++;
+            }
+        }
 
         return;
     }
@@ -229,36 +255,40 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        #pragma omp parallel
-        {
-            // Luma plane is the same
-            #pragma omp single nowait
-            memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * 2 * hStrideYUV422P;
+            auto srcYb = srcY + hStrideYUV422P;
 
-            // Iterate blocks of 2x1 channel points
-            #pragma omp for schedule(static)
-            for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
-                // Discover buffer pointers
-                auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
-                auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
-                auto srcUb = srcU + hStrideYUV422PChroma;
-                auto srcVb = srcV + hStrideYUV422PChroma;
-                auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
-                auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
+            auto dstY = dstSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto dstYb = dstY + hStrideYUV420P;
 
-                for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
-                    // Get above chroma values
-                    uint8_t u = *srcU++; // U0
-                    uint8_t v = *srcV++; // V0
+            auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+            auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+            auto srcUb = srcU + hStrideYUV422PChroma;
+            auto srcVb = srcV + hStrideYUV422PChroma;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
 
-                                         // Get below chroma values
-                    uint8_t ub = *srcUb++; // U1
-                    uint8_t vb = *srcVb++; // V1
+            for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                // Get above chroma values
+                uint8_t u = *srcU++; // U0
+                uint8_t v = *srcV++; // V0
 
-                                           // Assign values
-                    *dstU++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
-                    *dstV++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
-                }
+                // Get below chroma values
+                uint8_t ub = *srcUb++; // U1
+                uint8_t vb = *srcVb++; // V1
+
+                // Assign values
+                *dstU++ = uint8_t(roundFast((u + ub) / 2.));
+                *dstV++ = uint8_t(roundFast((v + vb) / 2.));
+
+                *dstY++ = *srcY++;
+                *dstY++ = *srcY++;
+
+                *dstYb++ = *srcYb++;
+                *dstYb++ = *srcYb++;
             }
         }
 
@@ -274,35 +304,39 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        #pragma omp parallel
-        {
-            // Luma plane is the same
-            #pragma omp single nowait
-            memcpy(dstSlice[0], srcSlice[0], vStrideYUV422P * hStrideYUV422P);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * 2 * hStrideYUV422P;
+            auto srcYb = srcY + hStrideYUV422P;
 
-            // Iterate blocks of 2x1 channel points
-            #pragma omp for schedule(static)
-            for(int vIndex = 0; vIndex < vStrideYUV422P / 2; vIndex++){
-                // Discover buffer pointers
-                auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
-                auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
-                auto srcUb = srcU + hStrideYUV422PChroma;
-                auto srcVb = srcV + hStrideYUV422PChroma;
-                auto dstC = dstSlice[1] + vIndex * hStrideNV12;
+            auto dstY = dstSlice[0] + vIndex * 2 * hStrideNV12;
+            auto dstYb = dstY + hStrideNV12;
 
-                for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
-                    // Get above chroma values
-                    uint8_t u = *srcU++; // U0
-                    uint8_t v = *srcV++; // V0
+            auto srcU = srcSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+            auto srcV = srcSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+            auto srcUb = srcU + hStrideYUV422PChroma;
+            auto srcVb = srcV + hStrideYUV422PChroma;
+            auto dstC = dstSlice[1] + vIndex * hStrideNV12;
 
-                                         // Get below chroma values
-                    uint8_t ub = *srcUb++; // U1
-                    uint8_t vb = *srcVb++; // V1
+            for(int hIndex = 0; hIndex < hStrideYUV422PChroma; hIndex++){
+                // Get above chroma values
+                uint8_t u = *srcU++; // U0
+                uint8_t v = *srcV++; // V0
 
-                                           // Assign values
-                    *dstC++ = uint8_t(roundFast((static_cast<double>(u) + static_cast<double>(ub)) / 2.));
-                    *dstC++ = uint8_t(roundFast((static_cast<double>(v) + static_cast<double>(vb)) / 2.));
-                }
+                // Get below chroma values
+                uint8_t ub = *srcUb++; // U1
+                uint8_t vb = *srcVb++; // V1
+
+                // Assign values
+                *dstC++ = uint8_t(roundFast((u + ub) / 2.));
+                *dstC++ = uint8_t(roundFast((v + vb) / 2.));
+
+                *dstY++ = *srcY++;
+                *dstY++ = *srcY++;
+
+                *dstYb++ = *srcYb++;
+                *dstYb++ = *srcYb++;
             }
         }
 
@@ -317,7 +351,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideV210 = width / 6 * 4;
 
         // Iterate blocks of 1x6 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
@@ -342,7 +376,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 auto v2 = *srcV++ << 2U; // V2
                 auto y5 = *srcB++ << 2U; // Y5
 
-                                         // Assign value
+                // Assign value
                 *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
                 *dstB++ = (y2 << 20U) | (u1 << 10U) | y1;
                 *dstB++ = (u2 << 20U) | (y3 << 10U) | v1;
@@ -352,9 +386,9 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         return;
     }
-    #pragma endregion
+#pragma endregion
 
-    #pragma region YUV420P
+#pragma region YUV420P
     if(srcPixelFormat == AV_PIX_FMT_YUV420P && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Used metrics
         int vStrideYUV420P = height;
@@ -363,7 +397,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideUYVY422 = width * 2;
 
         // Iterate blocks of 2x2 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
@@ -378,13 +412,13 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 uint8_t u = *srcU++; // U
                 uint8_t v = *srcV++; // V
 
-                                     // Assign above line values
+                // Assign above line values
                 *dstB++ = u; // U0
                 *dstB++ = *srcB++; // Y0
                 *dstB++ = v; // V0
                 *dstB++ = *srcB++; // Y1
 
-                                   // Assign below line values
+                // Assign below line values
                 *dstBb++ = u; // U0
                 *dstBb++ = *srcBb++; // Y0
                 *dstBb++ = v; // V0
@@ -404,35 +438,39 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        #pragma omp parallel
-        {
-            // Luma plane is the same
-            #pragma omp single nowait
-            memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * 2 * hStrideYUV422P;
+            auto srcYb = srcY + hStrideYUV422P;
 
-            // Iterate blocks of 2x2 channel points
-            #pragma omp for schedule(static)
-            for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
-                // Discover buffer pointers
-                auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
-                auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
-                auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
-                auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
-                auto dstUb = dstU + hStrideYUV422PChroma;
-                auto dstVb = dstV + hStrideYUV422PChroma;
+            auto dstY = dstSlice[0] + vIndex * 2 * hStrideYUV422P;
+            auto dstYb = dstY + hStrideYUV422P;
 
-                for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
-                    // Get chroma values
-                    uint8_t u = *srcU++; // U
-                    uint8_t v = *srcV++; // V
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+            auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+            auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+            auto dstUb = dstU + hStrideYUV422PChroma;
+            auto dstVb = dstV + hStrideYUV422PChroma;
 
-                                         // Assign values dupicated
-                    *dstU++ = u;
-                    *dstV++ = v;
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                // Get chroma values
+                uint8_t u = *srcU++; // U
+                uint8_t v = *srcV++; // V
 
-                    *dstUb++ = u;
-                    *dstVb++ = v;
-                }
+                // Assign values dupicated
+                *dstU++ = u;
+                *dstV++ = v;
+
+                *dstUb++ = u;
+                *dstVb++ = v;
+
+                *dstY++ = *srcY++;
+                *dstY++ = *srcY++;
+
+                *dstYb++ = *srcYb++;
+                *dstYb++ = *srcYb++;
             }
         }
 
@@ -444,10 +482,32 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int vStrideYUV420P = height;
         int hStrideYUV420P = width;
 
-        // Copy data
-        memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
-        memcpy(dstSlice[1], srcSlice[1], vStrideYUV420P * hStrideYUV420P / 4);
-        memcpy(dstSlice[2], srcSlice[2], vStrideYUV420P * hStrideYUV420P / 4);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto srcYb = srcY + hStrideYUV420P;
+
+            auto dstY = dstSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto dstYb = dstY + hStrideYUV420P;
+
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 2;
+
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                *dstY++ = *srcY++;
+                *dstY++ = *srcY++;
+
+                *dstYb++ = *srcYb++;
+                *dstYb++ = *srcYb++;
+
+                *dstU++ = *srcU++;
+                *dstV++ = *srcV++;
+            }
+        }
 
         return;
     }
@@ -459,24 +519,28 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int vStrideNV12 = height;
         int hStrideNV12 = width;
 
-        #pragma omp parallel
-        {
-            // Luma plane is the same
-            #pragma omp single nowait
-            memcpy(dstSlice[0], srcSlice[0], vStrideYUV420P * hStrideYUV420P);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto srcYb = srcY + hStrideYUV420P;
 
-            // Iterate blocks of 2x2 channel points
-            #pragma omp for schedule(static)
-            for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
-                // Discover buffer pointers
-                auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
-                auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
-                auto dstC = dstSlice[1] + vIndex * hStrideNV12;
+            auto dstY = dstSlice[0] + vIndex * 2 * hStrideYUV420P;
+            auto dstYb = dstY + hStrideYUV420P;
 
-                for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
-                    *dstC++ = *srcU++; // U
-                    *dstC++ = *srcV++; // V
-                }
+            auto srcU = srcSlice[1] + vIndex * hStrideYUV420P / 2;
+            auto srcV = srcSlice[2] + vIndex * hStrideYUV420P / 2;
+            auto dstC = dstSlice[1] + vIndex * hStrideNV12;
+
+            for(int hIndex = 0; hIndex < hStrideYUV420P / 2; hIndex++){
+                *dstY++ = *srcY++;
+                *dstY++ = *srcY++;
+
+                *dstYb++ = *srcYb++;
+                *dstYb++ = *srcYb++;
+
+                *dstC++ = *srcU++;
+                *dstC++ = *srcV++;
             }
         }
 
@@ -491,7 +555,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideV210 = width / 6 * 4;
 
         // Iterate blocks of 2x2 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideYUV420P / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * 2 * hStrideYUV420P;
@@ -544,9 +608,9 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         return;
     }
-    #pragma endregion
+#pragma endregion
 
-    #pragma region NV12
+#pragma region NV12
     if(srcPixelFormat == AV_PIX_FMT_NV12 && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Used metrics
         int vStrideNV12 = height;
@@ -555,7 +619,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideUYVY422 = width * 2;
 
         // Iterate blocks of 2x2 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * 2 * hStrideNV12;
@@ -569,13 +633,13 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 uint8_t u = *srcC++; // U
                 uint8_t v = *srcC++; // V
 
-                                     // Assign above line values
+                // Assign above line values
                 *dstB++ = u; // U0
                 *dstB++ = *srcB++; // Y0
                 *dstB++ = v; // V0
                 *dstB++ = *srcB++; // Y1
 
-                                   // Assign below line values
+                // Assign below line values
                 *dstBb++ = u; // U0
                 *dstBb++ = *srcBb++; // Y0
                 *dstBb++ = v; // V0
@@ -595,34 +659,37 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         int hStrideYUV422PChroma = hStrideYUV422P / 2;
 
-        #pragma omp parallel
-        {
-            // Luma plane is the same
-            #pragma omp single nowait
-            memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+        // Iterate blocks of 2x2 channel points
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * 2 * hStrideNV12;
+            auto srcYb = srcY + hStrideNV12;
+            auto dstY = dstSlice[0] + vIndex * 2 * hStrideYUV422P;
+            auto dstYb = dstY + hStrideYUV422P;
 
-            // Iterate blocks of 2x2 channel points
-            #pragma omp for schedule(static)
-            for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
-                // Discover buffer pointers
-                auto srcC = srcSlice[1] + vIndex * hStrideNV12;
-                auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
-                auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
-                auto dstUb = dstU + hStrideYUV422PChroma;
-                auto dstVb = dstV + hStrideYUV422PChroma;
+            auto srcC = srcSlice[1] + vIndex * hStrideNV12;
+            auto dstU = dstSlice[1] + vIndex * 2 * hStrideYUV422PChroma;
+            auto dstV = dstSlice[2] + vIndex * 2 * hStrideYUV422PChroma;
+            auto dstUb = dstU + hStrideYUV422PChroma;
+            auto dstVb = dstV + hStrideYUV422PChroma;
 
-                for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
-                    // Get chroma values
-                    uint8_t u = *srcC++; // U
-                    uint8_t v = *srcC++; // V
+            for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                *dstY++ = *srcY++;
+                *dstY++ = *srcY++;
+                
+                *dstYb++ = *srcYb++;
+                *dstYb++ = *srcYb++;
 
-                                         // Assign values dupicated
-                    *dstU++ = u;
-                    *dstV++ = v;
+                uint8_t u = *srcC++; // U
+                uint8_t v = *srcC++; // V
 
-                    *dstUb++ = u;
-                    *dstVb++ = v;
-                }
+                // Assign values duplicated
+                *dstU++ = u;
+                *dstV++ = v;
+
+                *dstUb++ = u;
+                *dstVb++ = v;
             }
         }
 
@@ -636,24 +703,24 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int vStrideYUV420P = height;
         int hStrideYUV420P = width;
 
-        #pragma omp parallel
-        {
-            // Luma plane is the same
-            #pragma omp single nowait
-            memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
+        // Iterate blocks of 2x2 channel points
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideNV12; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * hStrideNV12;
+            auto dstY = dstSlice[0] + vIndex * hStrideYUV420P;
+            auto srcC = srcSlice[1] + vIndex * hStrideNV12 / 2;
+            auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 4;
+            auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 4;
 
-            // Iterate blocks of 2x2 channel points
-            #pragma omp for schedule(static)
-            for(int vIndex = 0; vIndex < vStrideNV12; vIndex++){
-                // Discover buffer pointers
-                auto srcC = srcSlice[1] + vIndex * hStrideNV12 / 2;
-                auto dstU = dstSlice[1] + vIndex * hStrideYUV420P / 4;
-                auto dstV = dstSlice[2] + vIndex * hStrideYUV420P / 4;
+            for(int hIndex = 0; hIndex < hStrideNV12 / 4; hIndex++){
+                *dstY++ = *srcY++; // Y
+                *dstY++ = *srcY++; // Y
+                *dstY++ = *srcY++; // Y
+                *dstY++ = *srcY++; // Y
 
-                for(int hIndex = 0; hIndex < hStrideNV12 / 4; hIndex++){
-                    *dstU++ = *srcC++; // U
-                    *dstV++ = *srcC++; // V
-                }
+                *dstU++ = *srcC++; // U
+                *dstV++ = *srcC++; // V
             }
         }
 
@@ -665,9 +732,28 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int vStrideNV12 = height;
         int hStrideNV12 = width;
 
-        // Copy data
-        memcpy(dstSlice[0], srcSlice[0], vStrideNV12 * hStrideNV12);
-        memcpy(dstSlice[1], srcSlice[1], vStrideNV12 * hStrideNV12 / 2);
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideNV12; vIndex++){
+            // Discover buffer pointers
+            auto srcY = srcSlice[0] + vIndex * hStrideNV12;
+            auto dstY = dstSlice[0] + vIndex * hStrideNV12;
+
+            for(int hIndex = 0; hIndex < hStrideNV12; hIndex++){
+                *dstY++ = *srcY++;
+            }
+        }
+
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
+        for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
+            // Discover buffer pointers
+            auto srcC = srcSlice[1] + vIndex * hStrideNV12;
+            auto dstC = dstSlice[1] + vIndex * hStrideNV12;
+
+            for(int hIndex = 0; hIndex < hStrideNV12 / 2; hIndex++){
+                *dstC++ = *srcC++;
+                *dstC++ = *srcC++;
+            }
+        }
 
         return;
     }
@@ -680,7 +766,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideV210 = width / 6 * 4;
 
         // Iterate blocks of 2x2 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideNV12 / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * 2 * hStrideNV12;
@@ -730,9 +816,9 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         return;
     }
-    #pragma endregion
+#pragma endregion
 
-    #pragma region V210
+#pragma region V210
     if(srcPixelFormat == AV_PIX_FMT_V210 && dstPixelFormat == AV_PIX_FMT_UYVY422){
         // Used metrics
         int vStrideV210 = height;
@@ -741,7 +827,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideUYVY422 = width * 2;
 
         // Iterate blocks of 1x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
             // Discover buffer pointers
             auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
@@ -796,7 +882,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideYUV422P = width;
 
         // Iterate blocks of 1x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
             // Discover buffer pointers
             auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
@@ -853,7 +939,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideYUV420P = width;
 
         // Iterate blocks of 2x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * 2 * hStrideV210;
@@ -923,13 +1009,13 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 *dstBb++ = y5b;
 
                 // Assign chroma values
-                *dstU++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
-                *dstU++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
-                *dstU++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
+                *dstU++ = uint8_t(roundFast((u0 + u0b) / 2.));
+                *dstU++ = uint8_t(roundFast((u1 + u1b) / 2.));
+                *dstU++ = uint8_t(roundFast((u2 + u2b) / 2.));
 
-                *dstV++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
-                *dstV++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
-                *dstV++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+                *dstV++ = uint8_t(roundFast((v0 + v0b) / 2.));
+                *dstV++ = uint8_t(roundFast((v1 + v1b) / 2.));
+                *dstV++ = uint8_t(roundFast((v2 + v2b) / 2.));
             }
         }
 
@@ -944,7 +1030,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         int hStrideNV12 = width;
 
         // Iterate blocks of 2x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideV210 / 2; vIndex++){
             // Discover buffer pointers
             auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * 2 * hStrideV210;
@@ -1013,12 +1099,12 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 *dstBb++ = y5b;
 
                 // Assign chroma values
-                *dstC++ = uint8_t(roundFast((static_cast<double>(u0) + static_cast<double>(u0b)) / 2.));
-                *dstC++ = uint8_t(roundFast((static_cast<double>(v0) + static_cast<double>(v0b)) / 2.));
-                *dstC++ = uint8_t(roundFast((static_cast<double>(u1) + static_cast<double>(u1b)) / 2.));
-                *dstC++ = uint8_t(roundFast((static_cast<double>(v1) + static_cast<double>(v1b)) / 2.));
-                *dstC++ = uint8_t(roundFast((static_cast<double>(u2) + static_cast<double>(u2b)) / 2.));
-                *dstC++ = uint8_t(roundFast((static_cast<double>(v2) + static_cast<double>(v2b)) / 2.));
+                *dstC++ = uint8_t(roundFast((u0 + u0b) / 2.));
+                *dstC++ = uint8_t(roundFast((v0 + v0b) / 2.));
+                *dstC++ = uint8_t(roundFast((u1 + u1b) / 2.));
+                *dstC++ = uint8_t(roundFast((v1 + v1b) / 2.));
+                *dstC++ = uint8_t(roundFast((u2 + u2b) / 2.));
+                *dstC++ = uint8_t(roundFast((v2 + v2b) / 2.));
             }
         }
 
@@ -1049,7 +1135,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         double const16 = 16.;
 
         // Iterate blocks of 1x4 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideV210; vIndex++){
             // Discover buffer pointers
             auto srcB = reinterpret_cast<uint32_t*>(srcSlice[0]) + vIndex * hStrideV210;
@@ -1078,28 +1164,28 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 auto y5 = (*srcB >> 20U) & 0x3FF; // Y5
                 *srcB++;
 
-                *dstU++ = uint8_t(roundFast(static_cast<double>(u0) * constChroma + const16));
-                *dstB++ = uint8_t(roundFast(static_cast<double>(y0) * constLuma + const16));
-                *dstV++ = uint8_t(roundFast(static_cast<double>(v0) * constChroma + const16));
-                *dstB++ = uint8_t(roundFast(static_cast<double>(y1) * constLuma + const16));
+                *dstU++ = uint8_t(roundFast(u0 * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(y0 * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(v0 * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(y1 * constLuma + const16));
 
-                *dstU++ = uint8_t(roundFast(static_cast<double>(u1) * constChroma + const16));
-                *dstB++ = uint8_t(roundFast(static_cast<double>(y2) * constLuma + const16));
-                *dstV++ = uint8_t(roundFast(static_cast<double>(v1) * constChroma + const16));
-                *dstB++ = uint8_t(roundFast(static_cast<double>(y3) * constLuma + const16));
+                *dstU++ = uint8_t(roundFast(u1 * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(y2 * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(v1 * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(y3 * constLuma + const16));
 
-                *dstU++ = uint8_t(roundFast(static_cast<double>(u2) * constChroma + const16));
-                *dstB++ = uint8_t(roundFast(static_cast<double>(y4) * constLuma + const16));
-                *dstV++ = uint8_t(roundFast(static_cast<double>(v2) * constChroma + const16));
-                *dstB++ = uint8_t(roundFast(static_cast<double>(y5) * constLuma + const16));
+                *dstU++ = uint8_t(roundFast(u2 * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(y4 * constLuma + const16));
+                *dstV++ = uint8_t(roundFast(v2 * constChroma + const16));
+                *dstB++ = uint8_t(roundFast(y5 * constLuma + const16));
             }
         }
 
         return;
     }
-    #pragma endregion
+#pragma endregion
 
-    #pragma region YUV422PNORM
+#pragma region YUV422PNORM
     if(srcPixelFormat == AV_PIX_FMT_YUV422PNORM && dstPixelFormat == AV_PIX_FMT_V210){
         // Used metrics
         int vStrideYUV422P = height;
@@ -1113,7 +1199,7 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
         double constChroma = 1023. / 224.;
 
         // Iterate blocks of 1x6 channel points
-        #pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(guided, 1) num_threads(nThreads)
         for(int vIndex = 0; vIndex < vStrideYUV422P; vIndex++){
             // Discover buffer pointers
             auto srcB = srcSlice[0] + vIndex * hStrideYUV422P;
@@ -1138,21 +1224,21 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
                 auto v2n = *srcV++; // V2
                 auto y5n = *srcB++; // Y5
 
-                                    // Denormalize values
-                auto v0 = uint16_t(roundFast((static_cast<double>(v0n) - const16) * constChroma)) & 0x3FF;
-                auto y0 = uint16_t(roundFast((static_cast<double>(y0n) - const16) * constLuma)) & 0x3FF;
-                auto u0 = uint16_t(roundFast((static_cast<double>(u0n) - const16) * constChroma)) & 0x3FF;
-                auto y2 = uint16_t(roundFast((static_cast<double>(y2n) - const16) * constLuma)) & 0x3FF;
+                // Denormalize values
+                auto v0 = uint16_t(roundFast((v0n - const16) * constChroma)) & 0x3FF;
+                auto y0 = uint16_t(roundFast((y0n - const16) * constLuma)) & 0x3FF;
+                auto u0 = uint16_t(roundFast((u0n - const16) * constChroma)) & 0x3FF;
+                auto y2 = uint16_t(roundFast((y2n - const16) * constLuma)) & 0x3FF;
 
-                auto u1 = uint16_t(roundFast((static_cast<double>(u1n) - const16) * constChroma)) & 0x3FF;
-                auto y1 = uint16_t(roundFast((static_cast<double>(y1n) - const16) * constLuma)) & 0x3FF;
-                auto u2 = uint16_t(roundFast((static_cast<double>(u2n) - const16) * constChroma)) & 0x3FF;
-                auto y3 = uint16_t(roundFast((static_cast<double>(y3n) - const16) * constLuma)) & 0x3FF;
+                auto u1 = uint16_t(roundFast((u1n - const16) * constChroma)) & 0x3FF;
+                auto y1 = uint16_t(roundFast((y1n - const16) * constLuma)) & 0x3FF;
+                auto u2 = uint16_t(roundFast((u2n - const16) * constChroma)) & 0x3FF;
+                auto y3 = uint16_t(roundFast((y3n - const16) * constLuma)) & 0x3FF;
 
-                auto v1 = uint16_t(roundFast((static_cast<double>(v1n) - const16) * constChroma)) & 0x3FF;
-                auto y5 = uint16_t(roundFast((static_cast<double>(y5n) - const16) * constLuma)) & 0x3FF;
-                auto v2 = uint16_t(roundFast((static_cast<double>(v2n) - const16) * constChroma)) & 0x3FF;
-                auto y4 = uint16_t(roundFast((static_cast<double>(y4n) - const16) * constLuma)) & 0x3FF;
+                auto v1 = uint16_t(roundFast((v1n - const16) * constChroma)) & 0x3FF;
+                auto y5 = uint16_t(roundFast((y5n - const16) * constLuma)) & 0x3FF;
+                auto v2 = uint16_t(roundFast((v2n - const16) * constChroma)) & 0x3FF;
+                auto y4 = uint16_t(roundFast((y4n - const16) * constLuma)) & 0x3FF;
 
                 // Assign value
                 *dstB++ = (v0 << 20U) | (y0 << 10U) | u0;
@@ -1164,5 +1250,5 @@ void omp_formatConversion(int width, int height, int srcPixelFormat, uint8_t* sr
 
         return;
     }
-    #pragma endregion
+#pragma endregion
 }

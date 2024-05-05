@@ -48,6 +48,7 @@ string operationToString(int operation){
 // Test ffmpeg procedure
 int testFFMPEGSingle(ImageClass &inImg, ImageClass &outImg, int operation){
     // Prepare output frame
+    inImg.loadImage();
     outImg.initFrame();
 
     // Resample and scale
@@ -115,12 +116,13 @@ void testFFMPEG(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vecto
 }
 
 // Test cuda procedure
-int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation, int nTimes) {
+int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation) {
     // Prepare output frame
+    inImg.loadImage();
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = cuda_resample(inImg.frame, outImg.frame, operation, nTimes);
+    int executionTime = cuda_resample(inImg.frame, outImg.frame, operation);
     if (executionTime < 0) {
         cout << "[CUDA] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
@@ -134,8 +136,30 @@ int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation, int nTi
 }
 
 int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes) {
+    // Temporary variable
+    long long acc = 0;
+
+    inImg.loadImage();
+    outImg.initFrame();
+
+    // Initializes memory in device
+    cuda_init(inImg.frame, outImg.frame, operation);
+
+    // Repeat nTimes
+    for(int ithTime = 0; ithTime < nTimes; ithTime++){
+        int tempExecutionTime = testCUDASingle(inImg, outImg, operation);
+        if(tempExecutionTime < 0)
+            return -1;
+
+        // Increment execution time accumulator
+        acc += tempExecutionTime;
+    }
+
+    // Free used resources by device
+    cuda_finish();
+
     // Average execution time
-    int avgExecutionTime = testCUDASingle(inImg, outImg, operation, nTimes) / nTimes;
+    int avgExecutionTime = acc / nTimes;
 
     // Display results
     cout << "[CUDA] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;

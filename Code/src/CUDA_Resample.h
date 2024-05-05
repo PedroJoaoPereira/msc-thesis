@@ -21,7 +21,13 @@ extern "C" {
 using namespace std;
 using namespace std::chrono;
 
+// Initializes data
+void cuda_init(AVFrame* src, AVFrame* dst, int operation);
+
 // Wrapper for the cuda resample operation method
-int cuda_resample(AVFrame* src, AVFrame* dst, int operation, int nTimes);
+int cuda_resample(AVFrame* src, AVFrame* dst, int operation);
+
+// Free resources
+void cuda_finish();
 
 #endif

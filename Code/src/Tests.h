@@ -19,7 +19,7 @@ int testFFMPEGAverage(ImageClass &inImg, ImageClass outImg, int operation, int n
 void testFFMPEG(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes);
 
 // Test cuda procedure
-int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation, int nTimes);
+int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation);
 int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes);
 void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes);
 

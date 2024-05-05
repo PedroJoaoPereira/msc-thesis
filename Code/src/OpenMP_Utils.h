@@ -1,6 +1,8 @@
 #ifndef OMP_UTILS_H
 #define OMP_UTILS_H
 
+#include <omp.h>
+
 #include "ImageUtils.h"
 #include "MathMethods.h"
 

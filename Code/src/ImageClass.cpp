@@ -140,6 +140,12 @@ ImageClass::ImageClass(string fileName, int width, int height, int pixelFormat){
 
 // Load image into avframe
 void ImageClass::loadImage(){
+    if(isInitialized){
+        av_frame_free(&frame);
+        free(frameBuffer);
+    } else
+        isInitialized = true;
+
     // Read image from a file
     if(readImageFromFile(fileName, &frameBuffer) < 0)
         return;
@@ -152,10 +158,11 @@ void ImageClass::loadImage(){
 
 // Create frame
 void ImageClass::initFrame(){
-    if(isInitialized)
-        return;
-
-    isInitialized = true;
+    if(isInitialized){
+        av_frame_free(&frame);
+        free(frameBuffer);
+    }else
+        isInitialized = true;
 
     // Prepare to initialize frame
     if(createImageDataBuffer(width, height, pixelFormat, &frameBuffer) < 0)
