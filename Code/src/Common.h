@@ -42,14 +42,14 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
 // Limit a pixel index value to a defined interval
 void clampPixel(int &index, int min, int max);
 
-// double val   - value to be clamped
-// double min   - minimum limit of clamping
-// double max   - maximum limit of clamping
+// float val    - value to be clamped
+// float min    - minimum limit of clamping
+// float max    - maximum limit of clamping
 // Limit a value to a defined interval
-void clamp(double &val, double min, double max);
+void clamp(float &val, float min, float max);
 
-// double value - value to be converted
+// float value  - value to be converted
 // Convert a double to an uint8_t
-uint8_t double2uint8_t(double value);
+uint8_t float2uint8_t(float value);
 
 #endif

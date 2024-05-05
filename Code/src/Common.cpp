@@ -111,15 +111,15 @@ void clampPixel(int &index, int min, int max){
 }
 
 // Limit a value to a defined interval
-void clamp(double &val, double min, double max){
+void clamp(float &val, float min, float max){
     if(val < min)
         val = min;
     else if(val > max)
         val = max;
 }
 
-// Convert a double to an uint8_t
-uint8_t double2uint8_t(double value){
-    value += 6755399441055744.0;
-    return reinterpret_cast<uint8_t&>(value);
+// Convert a float to an uint8_t
+uint8_t float2uint8_t(float value){
+    value += 0.5f;
+    return static_cast<uint8_t>(value);
 }
