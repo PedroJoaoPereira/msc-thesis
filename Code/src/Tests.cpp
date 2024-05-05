@@ -68,7 +68,7 @@ int testFFMPEGSingle(ImageClass &inImg, ImageClass &outImg, int operation){
 int testFFMPEGAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes){
     // Temporary variable
     long long acc = 0;
-    
+
     // Repeat nTimes
     for(int ithTime = 0; ithTime < nTimes; ithTime++){
         int tempExecutionTime = testFFMPEGSingle(inImg, outImg, operation);
@@ -105,7 +105,7 @@ void testFFMPEG(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vecto
         for(int indexOut = 0; indexOut < outImgs.size(); indexOut++){
             // For each input image
             for(int indexIn = 0; indexIn < inImgs.size(); indexIn++){
-                if ((*inImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_V210 || (*outImgs.at(indexOut)).pixelFormat == AV_PIX_FMT_V210)
+                if((*inImgs.at(indexIn)).pixelFormat == AV_PIX_FMT_V210 || (*outImgs.at(indexOut)).pixelFormat == AV_PIX_FMT_V210)
                     continue;
 
                 if(testFFMPEGAverage((*inImgs.at(indexIn)), (*outImgs.at(indexOut)), operations.at(indexOp), nTimes) < 0)
@@ -116,14 +116,15 @@ void testFFMPEG(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vecto
 }
 
 // Test cuda procedure
-int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation) {
+int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation, double* &times){
     // Prepare output frame
     inImg.loadImage();
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = cuda_resample(inImg.frame, outImg.frame, operation);
-    if (executionTime < 0) {
+    times = (double*) malloc(3 * sizeof(double));
+    int executionTime = cuda_resample(inImg.frame, outImg.frame, operation, times);
+    if(executionTime < 0){
         cout << "[CUDA] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
         cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
@@ -132,12 +133,14 @@ int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation) {
     }
 
     // Success
-    return executionTime;
+    return 1;
 }
 
-int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes) {
+int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTimes){
     // Temporary variable
-    long long acc = 0;
+    high_resolution_clock::time_point initTime, stopTime;
+    long long initAcc = 0, finishAcc = 0;
+    double firstConvertion = 0., transferAndResample = 0., secondConversion = 0.;
 
     inImg.loadImage();
     outImg.initFrame();
@@ -146,27 +149,44 @@ int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTi
     cuda_init(inImg.frame, outImg.frame, operation);
 
     // Repeat nTimes
+    double* times;
     for(int ithTime = 0; ithTime < nTimes; ithTime++){
-        int tempExecutionTime = testCUDASingle(inImg, outImg, operation);
+        int tempExecutionTime = testCUDASingle(inImg, outImg, operation, times);
         if(tempExecutionTime < 0)
             return -1;
 
         // Increment execution time accumulator
-        acc += tempExecutionTime;
+        firstConvertion += times[0];
+        transferAndResample += times[1];
+        secondConversion += times[2];
     }
 
     // Free used resources by device
     cuda_finish();
 
-    // Average execution time
-    int avgExecutionTime = acc / nTimes;
+    if(!(inImg.height == outImg.height && inImg.width == outImg.width))
+        for(int ithTime = 0; ithTime < nTimes; ithTime++){
+            initTime = high_resolution_clock::now();
+            cuda_init(inImg.frame, outImg.frame, operation);
+            stopTime = high_resolution_clock::now();
+            initAcc += duration_cast<microseconds>(stopTime - initTime).count();
+
+            initTime = high_resolution_clock::now();
+            cuda_finish();
+            stopTime = high_resolution_clock::now();
+            finishAcc += duration_cast<microseconds>(stopTime - initTime).count();
+        }
 
     // Display results
     cout << "[CUDA] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
     cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
     cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
     cout << "\t\tOperation: " << operationToString(operation) << endl;
-    cout << "\tExecution Time ==> " << avgExecutionTime / 1000. << " ms" << endl << endl;
+    cout << "\t1st Conversion Time ==> " << (firstConvertion / nTimes) / 1000. << " ms" << endl;
+    cout << "\tData and Resample Time ==> " << (transferAndResample / nTimes) / 1000. << " ms" << endl;
+    cout << "\t2nd Conversion Time ==> " << (secondConversion / nTimes) / 1000. << " ms" << endl;
+    cout << "\tInit time: " << (initAcc / nTimes) / 1000. << " ms" << endl;
+    cout << "\tFinish time: " << (finishAcc / nTimes) / 1000. << " ms" << endl << endl;
 
     // Write image to file
     outImg.fileName += "[CUDA]" + operationToString(operation) + "-" + pixelFormatToString(inImg.pixelFormat) + "-" + pixelFormatToString(outImg.pixelFormat);
@@ -174,17 +194,17 @@ int testCUDAAverage(ImageClass &inImg, ImageClass outImg, int operation, int nTi
     outImg.writeImage();
 
     // Success
-    return avgExecutionTime;
+    return 1;
 }
 
-void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes) {
+void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
     // For each operation
-    for (int indexOp = 0; indexOp < operations.size(); indexOp++) {
+    for(int indexOp = 0; indexOp < operations.size(); indexOp++){
         // For each output image
-        for (int indexOut = 0; indexOut < outImgs.size(); indexOut++) {
+        for(int indexOut = 0; indexOut < outImgs.size(); indexOut++){
             // For each input image
-            for (int indexIn = 0; indexIn < inImgs.size(); indexIn++) {
-                if (testCUDAAverage((*inImgs.at(indexIn)), (*outImgs.at(indexOut)), operations.at(indexOp), nTimes) < 0)
+            for(int indexIn = 0; indexIn < inImgs.size(); indexIn++){
+                if(testCUDAAverage((*inImgs.at(indexIn)), (*outImgs.at(indexOut)), operations.at(indexOp), nTimes) < 0)
                     return;
             }
         }
@@ -193,6 +213,6 @@ void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<
 
 // Test all procedures
 void testAll(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
-        testFFMPEG(inImgs, outImgs, operations, nTimes);
-        testCUDA(inImgs, outImgs, operations, nTimes);
+    testFFMPEG(inImgs, outImgs, operations, nTimes);
+    testCUDA(inImgs, outImgs, operations, nTimes);
 }
