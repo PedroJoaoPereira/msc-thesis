@@ -49,7 +49,11 @@ void clampPixel(int &index, int min, int max);
 void clamp(float &val, float min, float max);
 
 // float value  - value to be converted
-// Convert a double to an uint8_t
+// Convert a float to an uint8_t
 uint8_t float2uint8_t(float value);
+
+// float value  - value to be converted
+// Convert a float to an int
+int float2int(float value);
 
 #endif

@@ -23,9 +23,10 @@ int main(){
     // INFO OF IMAGES USED IN TESTS ------------------
     //ImageInfo imgDebug("imgs/xs.yuv", 2, 2, AV_PIX_FMT_YUV422P);
     //ImageInfo imgDebug("imgs/square.yuv", 6, 6, AV_PIX_FMT_YUV422P);
-    ImageInfo imgDebug("imgs/lin-yuv422p-6x6.yuv", 6, 6, AV_PIX_FMT_YUV422P);
+    //ImageInfo imgDebug("imgs/lin-yuv422p-6x6.yuv", 6, 6, AV_PIX_FMT_YUV422P);
     //ImageInfo imgDebug("imgs/color.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
     //ImageInfo imgDebug("imgs/rgb24-6x6.yuv", 6, 6, AV_PIX_FMT_RGB24);
+    ImageInfo imgDebug("imgs/rainbow-24x16.yuv", 24, 16, AV_PIX_FMT_YUV422P);
 
     ImageInfo img01("imgs/uyvy422-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_UYVY422);
     ImageInfo img02("imgs/yuv420p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
@@ -35,7 +36,7 @@ int main(){
     // DEBUG VARIABLES -------------------------------
     int nTimes = 1;
     int operation = SWS_BICUBIC;
-    ImageInfo outImg("imgs/output.yuv", 12, 12, AV_PIX_FMT_YUV422P);
+    ImageInfo outImg("imgs/output.yuv", 48, 32, AV_PIX_FMT_YUV422P);
     // -----------------------------------------------
     // SCALING OPERATIONS ----------------------------
     // Initialize ffmpeg
