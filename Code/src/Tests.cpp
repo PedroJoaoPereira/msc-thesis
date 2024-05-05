@@ -1,7 +1,7 @@
 #include "Tests.h"
 
 // Facilitate writing operations
-string formatToString(int format){
+string pixelFormatToString(int format){
     // Return string name of format
     switch(format){
         case AV_PIX_FMT_RGB24:
@@ -51,8 +51,8 @@ int testFFMPEGSingle(ImageInfo &inImg, ImageInfo &outImg, int operation){
     if(executionTime < 0){
         cout << "[FFMPEG] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
-        cout << "\t\Formats: " << formatToString(inImg.pixelFormat) << "\tTo: " << formatToString(outImg.pixelFormat) << endl;
-        cout << "\t\Operation: " << operationToString(operation) << endl << endl;
+        cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
+        cout << "\t\tOperation: " << operationToString(operation) << endl << endl;
         return -1;
     }
 
@@ -80,12 +80,12 @@ int testFFMPEGAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int nTi
     // Display results
     cout << "[FFMPEG] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
     cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
-    cout << "\t\Formats: " << formatToString(inImg.pixelFormat) << "\tTo: " << formatToString(outImg.pixelFormat) << endl;
-    cout << "\t\Operation: " << operationToString(operation) << endl << endl;
+    cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
+    cout << "\t\tOperation: " << operationToString(operation) << endl;
     cout << "\tExecution Time ==> " << avgExecutionTime / 1000. << " ms" << endl << endl;
 
     // Write image to file
-    outImg.fileName += "[FFMPEG]" + operationToString(operation) + "-" + formatToString(inImg.pixelFormat) + "-" + formatToString(outImg.pixelFormat);
+    outImg.fileName += "[FFMPEG]" + operationToString(operation) + "-" + pixelFormatToString(inImg.pixelFormat) + "-" + pixelFormatToString(outImg.pixelFormat);
     outImg.fileName += "-" + to_string(inImg.width) + "x" + to_string(inImg.height) + "-" + to_string(outImg.width) + "x" + to_string(outImg.height) + ".yuv";
     outImg.writeImage();
 
@@ -113,12 +113,12 @@ int testSimulatorSingle(ImageInfo &inImg, ImageInfo &outImg, int operation){
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = ffmpeg_sim_scale(inImg.frame, outImg.frame, operation);
+    int executionTime = simulator_scale(inImg.frame, outImg.frame, operation);
     if(executionTime < 0){
         cout << "[SIMULATOR] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
-        cout << "\t\Formats: " << formatToString(inImg.pixelFormat) << "\tTo: " << formatToString(outImg.pixelFormat) << endl;
-        cout << "\t\Operation: " << operationToString(operation) << endl << endl;
+        cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
+        cout << "\t\tOperation: " << operationToString(operation) << endl << endl;
         return -1;
     }
 
@@ -146,12 +146,12 @@ int testSimulatorAverage(ImageInfo &inImg, ImageInfo outImg, int operation, int 
     // Display results
     cout << "[SIMULATOR] Processed image x" << nTimes << " time(s): " << inImg.fileName << endl;
     cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
-    cout << "\t\Formats: " << formatToString(inImg.pixelFormat) << "\tTo: " << formatToString(outImg.pixelFormat) << endl;
-    cout << "\t\Operation: " << operationToString(operation) << endl << endl;
+    cout << "\t\tFormats: " << pixelFormatToString(inImg.pixelFormat) << "\tTo: " << pixelFormatToString(outImg.pixelFormat) << endl;
+    cout << "\t\tOperation: " << operationToString(operation) << endl;
     cout << "\tExecution Time ==> " << avgExecutionTime / 1000. << " ms" << endl << endl;
 
     // Write image to file
-    outImg.fileName += "[SIMULATOR]" + operationToString(operation) + "-" + formatToString(inImg.pixelFormat) + "-" + formatToString(outImg.pixelFormat);
+    outImg.fileName += "[SIMULATOR]" + operationToString(operation) + "-" + pixelFormatToString(inImg.pixelFormat) + "-" + pixelFormatToString(outImg.pixelFormat);
     outImg.fileName += "-" + to_string(inImg.width) + "x" + to_string(inImg.height) + "-" + to_string(outImg.width) + "x" + to_string(outImg.height) + ".yuv";
     outImg.writeImage();
 

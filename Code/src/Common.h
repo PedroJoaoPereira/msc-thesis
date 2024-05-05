@@ -30,6 +30,10 @@ int lcm(int num1, int num2);
 // Return minimum number of two integers
 int min(int num1, int num2);
 
+// int operation    - value to be clamped
+// Return the value of the pixel support depending of the operation
+int getPixelSupport(int operation);
+
 // AVPixelFormat inFormat	- pixel format of the source data
 // Return the temporary scale pixel format
 AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat);
@@ -68,6 +72,11 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
 uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data);
 
 // TEMPLATES
+
+// int operation    - value to be clamped
+// Return coefficient function calculator
+template <class PrecisionType>
+PrecisionType(*getCoefMethod(int operation))(PrecisionType);
 
 // PrecisionType* val   - value to be clamped
 // PrecisionType min    - minimum limit of clamping

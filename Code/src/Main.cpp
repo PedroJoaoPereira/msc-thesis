@@ -69,7 +69,7 @@ int main(){
     bool isTestSequential = false;
     bool isTestOpenMP = false;
 
-    int nTimes = 5;
+    int nTimes = 1;
 
     // Test procedures
     testAll(isTestFFMPEG, isTestSimulator, isTestSequential, isTestOpenMP, inImgs, outImgs, operations, nTimes);

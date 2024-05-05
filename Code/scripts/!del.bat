@@ -1,0 +1,1 @@
+for %%i in (*.*) do if not "%%i"=="!del.bat" del /q "%%i"

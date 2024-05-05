@@ -9,8 +9,6 @@ bool isSupportedOperation(int operation){
         case SWS_BICUBIC:
         case SWS_LANCZOS:
             return true;
-        default:
-            break;
     }
 
     // Not a supported operation
@@ -29,8 +27,6 @@ bool isSupportedFormat(AVPixelFormat format){
         case AV_PIX_FMT_UYVY422:
         case AV_PIX_FMT_NV12:
             return true;
-        default:
-            break;
     }
 
     // Not a supported format
@@ -58,6 +54,24 @@ int min(int num1, int num2){
     return (num1 > num2) ? num2 : num1;
 }
 
+// Return the value of the pixel support depending of the operation
+int getPixelSupport(int operation){
+    // Resize operation with different kernels
+    switch(operation){
+        case SWS_POINT:
+            return 2;
+        case SWS_BILINEAR:
+            return 2;
+        case SWS_BICUBIC:
+            return 4;
+        case SWS_LANCZOS:
+            return 4;
+    }
+
+    // Insuccess
+    return -1;
+}
+
 // Return the temporary scale pixel format
 AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat){
     // Retrieve the temporary scale format
@@ -74,8 +88,6 @@ AVPixelFormat getTempScaleFormat(AVPixelFormat inFormat){
             return AV_PIX_FMT_YUV422P;
         case AV_PIX_FMT_NV12:
             return AV_PIX_FMT_YUV420P;
-        default:
-            break;
     }
 
     // If the source pixel format is not supported
