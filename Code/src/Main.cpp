@@ -21,30 +21,34 @@ int main(){
     // HD720  - 1280 x 720
     // -----------------------------------------------
     // INFO OF IMAGES USED IN TESTS ------------------
-    ImageInfo imgDebug("imgs/yuv444p-176x144.yuv", 176, 144, AV_PIX_FMT_YUV444P);
-
     ImageInfo img01("imgs/uyvy422-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_UYVY422);
     ImageInfo img02("imgs/yuv420p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
     ImageInfo img03("imgs/yuv422p-7680x4320.yuv", 7680, 4320, AV_PIX_FMT_YUV422P);
     // -----------------------------------------------
     // DEBUG VARIABLES -------------------------------
+    int nTimes = 15;
     int operation = SWS_BICUBIC;
-    ImageInfo outImg("imgs/output.yuv", 176, 144, AV_PIX_FMT_YUV422P);
+    ImageInfo outImg("imgs/output.yuv", 7680, 4320, AV_PIX_FMT_YUV420P);
+    //ImageInfo outImg("imgs/output.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
     // -----------------------------------------------
     // SCALING OPERATIONS ----------------------------
     // Initialize ffmpeg
     av_register_all();
 
     // Apply the operations
-    int executionTime = ffmpeg_scale(imgDebug, outImg, operation);
-    //int executionTime = sequential_scale(img01, outImg, operation);
-    if(executionTime < 0){
-        cerr << "Could not execute the scaling method!" << endl;
-        system("pause");
-        return -1;
-    }
+    while(nTimes > 0){
+        //int executionTime = ffmpeg_scale(img01, outImg, operation);
+        int executionTime = sequential_scale(img01, outImg, operation);
+        if(executionTime < 0){
+            cerr << "Could not execute the scaling method!" << endl;
+            system("pause");
+            return -1;
+        }
 
-    cout << "Execution time was " << executionTime << " ms!" << endl;
+        cout << "Execution time was " << executionTime << " ms!" << endl;
+
+        nTimes--;
+    }
 
     system("pause");
     return 0;
