@@ -90,7 +90,7 @@ int simulator_resampler(int srcWidth, int srcHeight, AVPixelFormat srcPixelForma
 template <class PrecisionType>
 int simulator_preCalculateCoefficients(int srcSize, int dstSize, int operation, int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs){
     // Calculate number of lines of coefficients
-    int preCalcCoefSize = lcm(srcSize, dstSize) / min(srcSize, dstSize);
+    int preCalcCoefSize = lcm(srcSize, dstSize) / min<int>(srcSize, dstSize);
 
     // Initialize 2d array
     preCalculatedCoefs = static_cast<PrecisionType**>(malloc(preCalcCoefSize * sizeof(PrecisionType*)));
@@ -267,7 +267,7 @@ int simulator_scale_aux(AVFrame* src, AVFrame* dst, int operation){
 
         // Temporary variables for precalculation of coefficients
         PrecisionType(*coefFunc)(PrecisionType) = getCoefMethod<PrecisionType>(operation);
-        int pixelSupport = getPixelSupport(operation);
+        int pixelSupport = getPixelSupport(operation, (srcWidth > dstWidth) && (srcHeight > dstHeight));
 
         // Create variables for precalculated coefficients
         PrecisionType** vCoefs;

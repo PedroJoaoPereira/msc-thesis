@@ -25,14 +25,10 @@ bool isSupportedFormat(AVPixelFormat format);
 // Return least common multiple of two integers
 int lcm(int num1, int num2);
 
-// int num1 - integer value
-// int num2 - integer value
-// Return minimum number of two integers
-int min(int num1, int num2);
-
 // int operation    - value to be clamped
+// bool isDownScale - boolean if operation is a down scale
 // Return the value of the pixel support depending of the operation
-int getPixelSupport(int operation);
+int getPixelSupport(int operation, bool isDownScale);
 
 // AVPixelFormat inFormat	- pixel format of the source data
 // Return the temporary scale pixel format
@@ -72,6 +68,12 @@ int initializeAVFrame(uint8_t** dataBuffer, int width, int height, AVPixelFormat
 uint8_t getPixel(int lin, int col, int width, int height, uint8_t* data);
 
 // TEMPLATES
+
+// PrecisionType num1   - first value
+// PrecisionType num2   - second value
+// Return minimum number of two values
+template <class PrecisionType>
+PrecisionType min(PrecisionType num1, PrecisionType num2);
 
 // int operation    - value to be clamped
 // Return coefficient function calculator
