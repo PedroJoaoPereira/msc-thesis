@@ -641,10 +641,23 @@ int sequential_scale_aux(AVFrame* src, AVFrame* dst, int operation) {
         PrecisionType** hCoefs;
         int hCoefsSize = sequential_preCalculateCoefficients<PrecisionType>(srcWidth, dstWidth, operation, pixelSupport, coefFunc, hCoefs);
 
-        // Apply the resizing operation to each color channel
-        for (int colorChannel = 0; colorChannel < 3; colorChannel++) {
-            sequential_resize<PrecisionType>(srcWidth, srcHeight, resampleFrame->data[colorChannel],
-                dstWidth, dstHeight, scaleFrame->data[colorChannel], operation,
+        // Calculate the chroma size depending on the source data pixel format
+        float tempWidthRatio = 1.f;
+        float tempHeightRatio = 1.f;
+        if (scalingSupportedFormat == AV_PIX_FMT_YUV422P || scalingSupportedFormat == AV_PIX_FMT_YUV420P)
+            tempWidthRatio = 0.5f;
+        if (scalingSupportedFormat == AV_PIX_FMT_YUV420P)
+            tempHeightRatio = 0.5f;
+
+        // Apply the resizing operation to luma channel
+        sequential_resize<PrecisionType>(srcWidth, srcHeight, resampleFrame->data[0],
+            dstWidth, dstHeight, scaleFrame->data[0], operation,
+            pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs);
+
+        // Apply the resizing operation to chroma channels
+        for (int colorChannel = 1; colorChannel < 3; colorChannel++) {
+            sequential_resize<PrecisionType>(static_cast<int>(srcWidth * tempWidthRatio), static_cast<int>(srcHeight * tempHeightRatio), resampleFrame->data[colorChannel],
+                static_cast<int>(dstWidth * tempWidthRatio), static_cast<int>(dstHeight * tempHeightRatio), scaleFrame->data[colorChannel], operation,
                 pixelSupport, vCoefsSize, vCoefs, hCoefsSize, hCoefs);
         }
 

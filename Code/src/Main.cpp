@@ -42,7 +42,7 @@ int main(){
 
     // Import all images into a vector
     vector<ImageInfo*> inImgs = vector<ImageInfo*>();
-    inImgs.push_back(img_obj_yuv444p_40x40);
+    inImgs.push_back(img_yuv422p_1920x1080);
     
     // Load all images
     for(int index = 0; index < inImgs.size(); index++)
@@ -50,9 +50,9 @@ int main(){
 
     // Create output images
     vector<ImageInfo*> outImgs = vector<ImageInfo*>();
-    outImgs.push_back(new ImageInfo("imgs/results/", 20, 20, AV_PIX_FMT_YUV444P));
+    //outImgs.push_back(new ImageInfo("imgs/results/", 20, 20, AV_PIX_FMT_YUV444P));
     //outImgs.push_back(new ImageInfo("imgs/results/", 80, 80, AV_PIX_FMT_YUV444P));
-    //outImgs.push_back(new ImageInfo("imgs/results/", 27, 27, AV_PIX_FMT_YUV444P));
+    outImgs.push_back(new ImageInfo("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
 
     // create operations
     vector<int> operations = vector<int>();
@@ -74,6 +74,6 @@ int main(){
 
     // Success
     cout << endl;
-    system("pause");
+    //system("pause");
     return 0;
 }
