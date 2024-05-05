@@ -34,15 +34,15 @@ int main(){
     ImageInfo* img_yuv422p_1920x1080 = new ImageInfo("imgs/bbb-yuv422p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV422P);
     ImageInfo* img_yuv420p_1920x1080 = new ImageInfo("imgs/bbb-yuv420p-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_YUV420P);
     ImageInfo* img_uyvy422_1920x1080 = new ImageInfo("imgs/bbb-uyvy422-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_UYVY422);
-    ImageInfo* img_v210_1920x1080 = new ImageInfo("imgs/bbb-v210-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_V210);
     ImageInfo* img_nv12_1920x1080 = new ImageInfo("imgs/bbb-nv12-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_NV12);
+    ImageInfo* img_v210_1920x1080 = new ImageInfo("imgs/bbb-v210-1920x1080.yuv", 1920, 1080, AV_PIX_FMT_V210);
 
     // Initialize ffmpeg
     av_register_all();
 
     // Import all images into a vector
     vector<ImageInfo*> inImgs = vector<ImageInfo*>();
-    inImgs.push_back(img_v210_1920x1080);
+    inImgs.push_back(img_nv12_1920x1080);
     
     // Load all images
     for(int index = 0; index < inImgs.size(); index++)
@@ -53,7 +53,7 @@ int main(){
     //outImgs.push_back(new ImageInfo("imgs/results/", 20, 20, AV_PIX_FMT_YUV444P));
     //outImgs.push_back(new ImageInfo("imgs/results/", 80, 80, AV_PIX_FMT_YUV444P));
     //outImgs.push_back(new ImageInfo("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
-    outImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
+    outImgs.push_back(new ImageInfo("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
 
     // create operations
     vector<int> operations = vector<int>();
@@ -63,7 +63,7 @@ int main(){
     //operations.push_back(SWS_LANCZOS);
 
     // Debug variables
-    bool isTestFFMPEG = true;
+    bool isTestFFMPEG = false;
     bool isTestSimulator = false;
     bool isTestSequential = true;
     bool isTestOpenMP = false;
@@ -74,7 +74,5 @@ int main(){
     testAll(isTestFFMPEG, isTestSimulator, isTestSequential, isTestOpenMP, inImgs, outImgs, operations, nTimes);
 
     // Success
-    cout << endl;
-    //system("pause");
     return 0;
 }

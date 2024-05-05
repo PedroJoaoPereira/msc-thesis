@@ -7,14 +7,20 @@ int sequential_resampler(int srcWidth, int srcHeight, int srcPixelFormat, uint8_
 
     // If same formats no need to resample
     if (srcPixelFormat == dstPixelFormat) {
+        // Calculate the chroma size depending on the source data pixel format
+        float tempHeightRatio = 1.f;
+        if (srcPixelFormat == AV_PIX_FMT_YUV420P || srcPixelFormat == AV_PIX_FMT_NV12)
+            tempHeightRatio = 0.5f;
+
         // Copy data between buffers
         if(srcPixelFormat == AV_PIX_FMT_V210)
             memcpy(dstSlice[0], srcSlice[0], ((srcWidth + 47) / 48) * 128 * srcHeight);
         else
             memcpy(dstSlice[0], srcSlice[0], srcStride[0] * srcHeight);
-        memcpy(dstSlice[1], srcSlice[1], srcStride[1] * srcHeight);
-        memcpy(dstSlice[2], srcSlice[2], srcStride[2] * srcHeight);
-        memcpy(dstSlice[3], srcSlice[3], srcStride[3] * srcHeight);
+
+        memcpy(dstSlice[1], srcSlice[1], srcStride[1] * srcHeight * tempHeightRatio);
+        memcpy(dstSlice[2], srcSlice[2], srcStride[2] * srcHeight * tempHeightRatio);
+        memcpy(dstSlice[3], srcSlice[3], srcStride[3] * srcHeight * tempHeightRatio);
 
         // Success
         return 0;
