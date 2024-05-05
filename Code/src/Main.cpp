@@ -5,9 +5,9 @@
 #include "Tests.h"
 
 extern "C"{
-    #define __STDC_CONSTANT_MACROS
-    #include <libavformat/avformat.h>
-    #include <libswscale/swscale.h>
+#define __STDC_CONSTANT_MACROS
+#include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
 }
 
 using namespace std;
@@ -100,7 +100,13 @@ int main(){
     scaleInImgs.push_back(img_uyvy422_1920x1080);
     //scaleInImgs.push_back(img_yuv422p_1920x1080);
     //scaleInImgs.push_back(img_yuv420p_1920x1080);
+    //scaleInImgs.push_back(img_nv12_1920x1080);
     //scaleInImgs.push_back(img_v210_1920x1080);
+
+    //scaleInImgs.push_back(img_uyvy422_7680x4320);
+    //scaleInImgs.push_back(img_yuv422p_7680x4320);
+    //scaleInImgs.push_back(img_yuv420p_7680x4320);
+    //scaleInImgs.push_back(img_nv12_7680x4320);
 
     // Load all images
     for(int index = 0; index < scaleInImgs.size(); index++)
@@ -112,11 +118,21 @@ int main(){
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_UYVY422));
 
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV422P));
+    scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV422P));
     scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV422P));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_YUV422P));
+    scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_YUV422P));
 
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_YUV420P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_YUV420P));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_YUV420P));
+
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_NV12));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_NV12));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_NV12));
+
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_V210));
+    scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_V210));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_V210));
 
     // Create scaling operations
     vector<int> scaleOperations = vector<int>();
@@ -125,7 +141,7 @@ int main(){
     scaleOperations.push_back(SWS_BICUBIC);
 
     // Test procedures
-    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 1);
+    testAll(scaleInImgs, scaleOutImgs, scaleOperations, 10);
 
     // Success
     return 0;

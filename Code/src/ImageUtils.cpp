@@ -8,7 +8,6 @@ bool hasSupportedConversion(int inFormat, int outFormat){
     if(inFormat == AV_PIX_FMT_YUV422PNORM && outFormat == AV_PIX_FMT_V210)
         return true;
 
-
     // Verify if supported input format
     switch(inFormat){
     case AV_PIX_FMT_UYVY422:

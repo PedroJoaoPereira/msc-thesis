@@ -339,7 +339,7 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         cudaMemcpyToArrayAsync(vSrc, 0, 0, toScalePtrs[2], srcHeightChroma * srcWidthChroma, cudaMemcpyHostToDevice, streamV);
         scaleTexV << <chromaLP.first, chromaLP.second, 0, streamV >> > (srcWidthChroma, srcHeightChroma, dstWidthChroma, dstHeightChroma, scaleWidthRatio, scaleHeightRatio, scaledDevice, offsetFrom1);
         cudaMemcpyAsync(fromScalePtrs[2], scaledDevice + offsetFrom1, dstHeightChroma * dstWidthChroma, cudaMemcpyDeviceToHost, streamV);
-    } else{
+    } else if(operation == SWS_BICUBIC){
         cudaMemcpyToArrayAsync(ySrc, 0, 0, toScalePtrs[0], srcHeight * srcWidth, cudaMemcpyHostToDevice, streamY);
         cubicScaleY << <lumaLP.first, lumaLP.second, 0, streamY >> > (srcWidth, srcHeight, dstWidth, dstHeight, scaleWidthRatio, scaleHeightRatio, scaledDevice);
         cudaMemcpyAsync(fromScalePtrs[0], scaledDevice, dstHeight * dstWidth, cudaMemcpyDeviceToHost, streamY);
@@ -364,8 +364,6 @@ void cuda_resample_aux(AVFrame* src, AVFrame* dst, int operation){
     cudaFreeArray(ySrc);
     cudaFreeArray(uSrc);
     cudaFreeArray(vSrc);
-    
-    
 
     // Format conversion operation
     omp_formatConversion(dstWidth, dstHeight, scaleFormat, fromScalePtrs, dstFormat, dst->data);
@@ -404,10 +402,26 @@ int cuda_resample(AVFrame* src, AVFrame* dst, int operation){
     }
 
     // Verify if data is aligned
-    if(((src->width % 4 != 0 && srcFormat == AV_PIX_FMT_UYVY422) || (dst->width % 4 != 0 && dstFormat == AV_PIX_FMT_UYVY422)) &&
-        ((src->width % 12 != 0 && srcFormat == AV_PIX_FMT_V210) || (dst->width % 12 != 0 && dstFormat == AV_PIX_FMT_V210))){
-        cerr << "[CUDA] Can not handle unaligned data!" << endl;
-        return -1;
+    if(srcFormat == AV_PIX_FMT_UYVY422 || dstFormat == AV_PIX_FMT_UYVY422){
+        if((src->width % 4 != 0) || (dst->width % 4 != 0)){
+            cerr << "[CUDA] Can not handle unaligned data!" << endl;
+            return -1;
+        }
+        if((src->height % 4 != 0) || (dst->height % 4 != 0)){
+            cerr << "[CUDA] Can not handle unaligned data!" << endl;
+            return -1;
+        }
+    }
+
+    if(srcFormat == AV_PIX_FMT_V210 || dstFormat == AV_PIX_FMT_V210){
+        if((src->width % 12 != 0) || (dst->width % 12 != 0)){
+            cerr << "[CUDA] Can not handle unaligned data!" << endl;
+            return -1;
+        }
+        if((src->height % 12 != 0) || (dst->height % 12 != 0)){
+            cerr << "[CUDA] Can not handle unaligned data!" << endl;
+            return -1;
+        }
     }
 
     // Verify valid resize
