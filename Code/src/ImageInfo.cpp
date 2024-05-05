@@ -60,6 +60,7 @@ int ImageInfo::initFrame(){
     return 0;
 }
 
+// Write image into a file
 int ImageInfo::writeImage(){
     // Temporary variables
     int retVal = -1;
