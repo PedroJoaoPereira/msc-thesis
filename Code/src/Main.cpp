@@ -52,7 +52,7 @@ int main(){
     bool isTestFFMPEG = true;
     bool isTestSequential = true;
     bool isTestOpenMP = true;
-    bool isTestCUDA = false;
+    bool isTestCUDA = true;
 
     int nTimes = 1;
 
@@ -64,13 +64,13 @@ int main(){
     vector<ImageClass*> uyvy422ResampleInImgs = vector<ImageClass*>();
     uyvy422ResampleInImgs.push_back(img_uyvy422_1920x1080);
     vector<ImageClass*> uyvy422ResampleOutImgs = vector<ImageClass*>();
-    uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
+    //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_UYVY422));
     uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV422P));
-    uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
-    uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
-    uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
+    //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_YUV420P));
+    //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_NV12));
+    //uyvy422ResampleOutImgs.push_back(new ImageClass("imgs/results/", 1920, 1080, AV_PIX_FMT_V210));
 
-    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, uyvy422ResampleInImgs, uyvy422ResampleOutImgs, resampleOperations, nTimes);
+    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, uyvy422ResampleInImgs, uyvy422ResampleOutImgs, resampleOperations, nTimes);
 
     // RESAMPLE YUV422P ---------------------------------------------
     vector<ImageClass*> yuv422pResampleInImgs = vector<ImageClass*>();
@@ -100,20 +100,20 @@ int main(){
     // Create scaling operations
     vector<int> scaleOperations = vector<int>();
     //scaleOperations.push_back(SWS_POINT);
-    //scaleOperations.push_back(SWS_BILINEAR);
+    scaleOperations.push_back(SWS_BILINEAR);
     //scaleOperations.push_back(SWS_BICUBIC);
-    scaleOperations.push_back(SWS_LANCZOS);
+    //scaleOperations.push_back(SWS_LANCZOS);
 
     // Test uyvy422 resample
     vector<ImageClass*> scaleInImgs = vector<ImageClass*>();
     scaleInImgs.push_back(img_uyvy422_1920x1080);
     vector<ImageClass*> scaleOutImgs = vector<ImageClass*>();
     //scaleOutImgs.push_back(new ImageClass("imgs/results/", 1280, 720, AV_PIX_FMT_UYVY422));
-    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
-    scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_UYVY422));
+    scaleOutImgs.push_back(new ImageClass("imgs/results/", 3840, 2160, AV_PIX_FMT_UYVY422));
+    //scaleOutImgs.push_back(new ImageClass("imgs/results/", 7680, 4320, AV_PIX_FMT_UYVY422));
 
     // Test procedures
-    testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, scaleInImgs, scaleOutImgs, scaleOperations, nTimes);
+    //testAll(isTestFFMPEG, isTestSequential, isTestOpenMP, isTestCUDA, scaleInImgs, scaleOutImgs, scaleOperations, nTimes);
 
     // Success
     return 0;

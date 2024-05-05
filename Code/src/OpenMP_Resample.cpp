@@ -611,7 +611,7 @@ int omp_formatConversion(int srcWidth, int srcHeight,
 // Precalculate coefficients
 template <class PrecisionType>
 int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation,
-    int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType** &preCalculatedCoefs){
+    int pixelSupport, PrecisionType(*coefFunc)(PrecisionType), PrecisionType* &preCalculatedCoefs){
 
     // Calculate size ratio
     PrecisionType sizeRatio = static_cast<PrecisionType>(dstSize) / static_cast<PrecisionType>(srcSize);
@@ -627,13 +627,14 @@ int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation,
     // Calculate number of lines of coefficients
     int preCalcCoefSize = isDownScale ? dstSize : lcm(srcSize, dstSize) / min<int>(srcSize, dstSize);
 
-    // Initialize 2d array
-    preCalculatedCoefs = static_cast<PrecisionType**>(malloc(preCalcCoefSize * sizeof(PrecisionType*)));
-    for(int index = 0; index < preCalcCoefSize; index++)
-        preCalculatedCoefs[index] = static_cast<PrecisionType*>(malloc(numCoefficients * sizeof(PrecisionType)));
+    // Initialize array
+    preCalculatedCoefs = static_cast<PrecisionType*>(malloc(preCalcCoefSize * numCoefficients * sizeof(PrecisionType)));
 
     // For each necessary line of coefficients
     for(int col = 0; col < preCalcCoefSize; col++){
+        // Calculate once
+        int indexOffset = col * numCoefficients;
+
         // Original line index coordinate
         PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(.5)) / sizeRatio;
 
@@ -653,26 +654,26 @@ int omp_preCalculateCoefficients(int srcSize, int dstSize, int operation,
         for(int index = 0; index < numCoefficients; index++){
             PrecisionType coefHolder = coefFunc((colOriginal - (startPosition + index)) / maxDistance);
             coefAcc += coefHolder;
-            preCalculatedCoefs[col][index] = coefHolder;
+            preCalculatedCoefs[indexOffset + index] = coefHolder;
         }
 
         // Avoid lines of coefficients without valid values
         if(operation == SWS_POINT){
-            if(preCalculatedCoefs[col][numCoefficientsDiv2 - 1] == preCalculatedCoefs[col][numCoefficientsDiv2]){
+            if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == preCalculatedCoefs[indexOffset + numCoefficientsDiv2]){
                 if(isDownScale){
-                    if(preCalculatedCoefs[col][numCoefficientsDiv2 - 1] == static_cast<PrecisionType>(0.) && numCoefficients % 2 != 0)
-                        preCalculatedCoefs[col][numCoefficientsDiv2 - 1] = static_cast<PrecisionType>(1.);
+                    if(preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] == static_cast<PrecisionType>(0.) && numCoefficients % 2 != 0)
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2 - 1] = static_cast<PrecisionType>(1.);
                     else
-                        preCalculatedCoefs[col][numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
+                        preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
                 } else
-                    preCalculatedCoefs[col][numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
+                    preCalculatedCoefs[indexOffset + numCoefficientsDiv2] = static_cast<PrecisionType>(1.);
             }
         }
 
         // Normalizes coefficients except on Nearest Neighbor interpolation
         if(operation != SWS_POINT)
             for(int index = 0; index < numCoefficients; index++)
-                preCalculatedCoefs[col][index] /= coefAcc;
+                preCalculatedCoefs[indexOffset + index] /= coefAcc;
     }
 
     // Success
@@ -684,7 +685,7 @@ template <class PrecisionType>
 void omp_resize(int srcWidth, int srcHeight, uint8_t* srcData,
     int dstWidth, int dstHeight, uint8_t* dstData,
     int operation, int pixelSupport,
-    int vCoefsSize, PrecisionType** vCoefs, int hCoefsSize, PrecisionType** hCoefs,
+    int vCoefsSize, PrecisionType* &vCoefs, int hCoefsSize, PrecisionType* &hCoefs,
     int colorChannel){
 
     // Get scale ratios
@@ -706,7 +707,7 @@ void omp_resize(int srcWidth, int srcHeight, uint8_t* srcData,
         // Calculate once the target line coordinate
         int targetLine = lin * dstWidth;
         // Calculate once the line index of coefficients
-        int indexLinCoef = lin % vCoefsSize;
+        int indexLinOffset = (lin % vCoefsSize) * numVCoefs;
 
         // Original line index coordinate
         PrecisionType linOriginal = (static_cast<PrecisionType>(lin) + static_cast<PrecisionType>(.5)) / scaleHeightRatio;
@@ -722,7 +723,7 @@ void omp_resize(int srcWidth, int srcHeight, uint8_t* srcData,
         // Iterate through each column of the scaled image
         for(int col = 0; col < dstWidth; col++){
             // Calculate once the column index of coefficients
-            int indexColCoef = col % hCoefsSize;
+            int indexColOffset = (col % hCoefsSize) * numHCoefs;
 
             // Original line index coordinate
             PrecisionType colOriginal = (static_cast<PrecisionType>(col) + static_cast<PrecisionType>(.5)) / scaleWidthRatio;
@@ -740,11 +741,11 @@ void omp_resize(int srcWidth, int srcHeight, uint8_t* srcData,
             // Calculate resulting color from coefficients
             for(int indexV = 0; indexV < numVCoefs; indexV++){
                 // Access once the memory
-                PrecisionType vCoef = vCoefs[indexLinCoef][indexV];
+                PrecisionType vCoef = vCoefs[indexLinOffset + indexV];
 
                 for(int indexH = 0; indexH < numHCoefs; indexH++){
                     // Access once the memory
-                    PrecisionType hCoef = hCoefs[indexColCoef][indexH];
+                    PrecisionType hCoef = hCoefs[indexColOffset + indexH];
 
                     // Get pixel from source data
                     uint8_t colorHolder = getPixel(startLinPosition + indexV, startColPosition + indexH, srcWidth, srcHeight, srcData);
@@ -812,9 +813,9 @@ int omp_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         int pixelSupport = getPixelSupport(operation);
 
         // Variables for precalculated coefficients
-        PrecisionType** vCoefs;
+        PrecisionType* vCoefs;
         int vCoefsSize;
-        PrecisionType** hCoefs;
+        PrecisionType* hCoefs;
         int hCoefsSize;
         #pragma omp parallel sections
         {
@@ -861,8 +862,8 @@ int omp_resample_aux(AVFrame* src, AVFrame* dst, int operation){
         lastFormatConversionPixelFormat = scalingSupportedFormat;
 
         // Free used resources
-        free2dBuffer<PrecisionType>(vCoefs, vCoefsSize);
-        free2dBuffer<PrecisionType>(hCoefs, hCoefsSize);
+        free(vCoefs);
+        free(hCoefs);
     }
 
     // Resamples image to a target format

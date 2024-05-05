@@ -180,7 +180,6 @@ void testSequential(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, v
     }
 }
 
-
 // Test openmp procedure
 int testOMPSingle(ImageClass &inImg, ImageClass &outImg, int operation) {
     // Prepare output frame
@@ -247,14 +246,13 @@ void testOMP(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<i
     }
 }
 
-/*
 // Test cuda procedure
 int testCUDASingle(ImageClass &inImg, ImageClass &outImg, int operation) {
     // Prepare output frame
     outImg.initFrame();
 
     // Resample and scale
-    int executionTime = cuda_scale(inImg.frame, outImg.frame, operation);
+    int executionTime = cuda_resample(inImg.frame, outImg.frame, operation);
     if (executionTime < 0) {
         cout << "[CUDA] Scale has failed with image: " << inImg.fileName << endl;
         cout << "\t\tDimensions: " << inImg.width << "x" << inImg.height << "\tTo: " << outImg.width << "x" << outImg.height << endl;
@@ -313,7 +311,6 @@ void testCUDA(vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<
         }
     }
 }
-*/
 
 // Test all procedures
 void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, bool isTestCUDA, vector<ImageClass*> &inImgs, vector<ImageClass*> &outImgs, vector<int> &operations, int nTimes){
@@ -323,9 +320,6 @@ void testAll(bool isTestFFMPEG, bool isTestSequential, bool isTestOpenMP, bool i
         testSequential(inImgs, outImgs, operations, nTimes);
     if (isTestOpenMP)
         testOMP(inImgs, outImgs, operations, nTimes);
-
-    /*
     if (isTestCUDA)
         testCUDA(inImgs, outImgs, operations, nTimes);
-        */
 }
